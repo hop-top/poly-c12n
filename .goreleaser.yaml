@@ -1,0 +1,73 @@
+version: 2
+project_name: c12n
+
+# The reusable workflow `hop-top/.github/.github/workflows/goreleaser-on-tag.yml`
+# synthesizes a local `v<bare>` git tag at the commit pointed to by the
+# real `c12n/v<version>` tag, and feeds it via GORELEASER_CURRENT_TAG so
+# stock {{.Version}} and {{.Tag}} resolve to the bare semver. Asset
+# uploads to the real prefixed tag are handled by the workflow itself
+# (see `release.disable: true` below).
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: c12n
+    main: ./cmd/c12n
+    binary: c12n
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+      - -buildvcs=false
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: c12n
+    ids: [c12n]
+    name_template: "c12n_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  # release-please already authors the changelog; don't duplicate.
+  disable: true
+
+release:
+  # The reusable workflow uploads dist/* to the real prefixed
+  # `c12n/v<version>` tag. GoReleaser OSS can't target a release
+  # with a different tag name than the current git tag
+  # (`release.tag:` is Pro-only), so disable its own publish step.
+  disable: true
+
+brews:
+  - name: c12n
+    repository:
+      owner: hop-top
+      name: homebrew-c12n
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/hop-top/c12n
+    description: "LLM request classification engine CLI"
+    license: MIT
+    # {{ .Env.RELEASE_TAG }} is the literal `c12n/v<version>` tag,
+    # which is the path segment GitHub Releases use for asset
+    # downloads. {{.Tag}} here would resolve to the synthesized
+    # bare tag — wrong for the URL.
+    url_template: "https://github.com/hop-top/c12n/releases/download/{{ .Env.RELEASE_TAG }}/{{ .ArtifactName }}"
+    install: bin.install "c12n"
+    test: |
+      system "#{bin}/c12n", "--version"
