@@ -24,12 +24,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: fmt
         run: cargo fmt --all -- --check
-      - name: clippy
-        run: cargo clippy -p c12n-core -- -D warnings
-      - name: test
-        run: cargo test -p c12n-core
+      - name: clippy (core)
+        run: cargo clippy -p hop-top-c12n-core -- -D warnings
+      - name: clippy (rs SDK)
+        run: cargo clippy -p hop-top-c12n -- -D warnings
+      - name: test (core)
+        run: cargo test -p hop-top-c12n-core
+      - name: test (rs SDK)
+        run: cargo test -p hop-top-c12n
       - name: build cdylib
-        run: cargo build -p c12n-core --release
+        run: cargo build -p hop-top-c12n-core --release
       - name: upload libc12n_core
         uses: actions/upload-artifact@v4
         with:
@@ -63,18 +67,22 @@ jobs:
           git config --global url."https://${TOKEN}@github.com/hop-top".insteadOf "https://github.com/hop-top"
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: go/go.mod
       - name: gofmt
         if: runner.os != 'Windows'
+        working-directory: go
         run: |
           if [ -n "$(gofmt -l .)" ]; then
             echo "gofmt needed:"; gofmt -l .; exit 1
           fi
       - name: vet
+        working-directory: go
         run: go vet ./...
       - name: test
+        working-directory: go
         run: go test -race -count=1 ./...
       - name: build CLI
+        working-directory: go
         run: go build -o bin/c12n ./cmd/c12n
 
   go-cgo:
@@ -100,7 +108,7 @@ jobs:
           git config --global url."https://${TOKEN}@github.com/hop-top".insteadOf "https://github.com/hop-top"
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: go/go.mod
       - name: Install MinGW (Windows)
         if: runner.os == 'Windows'
         uses: egor-tensin/setup-mingw@v2
@@ -112,6 +120,7 @@ jobs:
           path: target/release/
       - name: test (unix)
         if: runner.os != 'Windows'
+        working-directory: go
         env:
           CGO_LDFLAGS: "-L${{ github.workspace }}/target/release"
           LD_LIBRARY_PATH: "${{ github.workspace }}/target/release"
@@ -120,6 +129,7 @@ jobs:
       - name: test (windows)
         if: runner.os == 'Windows'
         shell: bash
+        working-directory: go
         env:
           CGO_LDFLAGS: "-L${{ github.workspace }}/target/release"
           WORKSPACE: ${{ github.workspace }}
@@ -149,12 +159,12 @@ jobs:
         env:
           PYTHONPATH: python
         run: |
-          cd c12n-py
+          cd py
           pytest -q
 
   ts-bindings:
     name: TS bindings (${{ matrix.os }})
-    if: hashFiles('c12n-ts/package.json') != ''
+    if: hashFiles('ts/package.json') != ''
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -169,7 +179,7 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: c12n-ts
+          workspaces: ts
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -187,20 +197,20 @@ jobs:
           fi
       - name: wasm-pack build
         shell: bash
-        working-directory: c12n-ts
+        working-directory: ts
         run: wasm-pack build --target bundler --release
       - name: install JS deps
         shell: bash
-        working-directory: c12n-ts
+        working-directory: ts
         run: pnpm install --frozen-lockfile
       - name: vitest
         shell: bash
-        working-directory: c12n-ts
+        working-directory: ts
         run: pnpm vitest run
 
   php-bindings:
     name: PHP bindings (PHP ${{ matrix.php }}, ${{ matrix.os }})
-    if: hashFiles('c12n-php/composer.json') != ''
+    if: hashFiles('php/composer.json') != ''
     needs: rust
     runs-on: ${{ matrix.os }}
     strategy:
@@ -222,12 +232,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: libc12n_core-${{ runner.os }}-${{ runner.arch }}
-          path: c12n-php/runtime/lib/
+          path: php/runtime/lib/
       - name: composer install
-        working-directory: c12n-php
+        working-directory: php
         run: composer install --no-interaction --prefer-dist
       - name: phpunit
-        working-directory: c12n-php
+        working-directory: php
         env:
-          C12N_CORE_LIB_PATH: ${{ github.workspace }}/c12n-php/runtime/lib
+          C12N_CORE_LIB_PATH: ${{ github.workspace }}/php/runtime/lib
         run: vendor/bin/phpunit

@@ -19,21 +19,41 @@ jobs:
       PYPI_REGISTRY_TOKEN:  ${{ secrets.PYPI_REGISTRY_TOKEN }}
       GH_MIRROR_PAT:        ${{ secrets.GH_MIRROR_PAT }}
     with:
-      homepage: https://github.com/hop-top/c12n
+      homepage: https://github.com/hop-top/poly-c12n
       description-prefix: "READ-ONLY MIRROR"
       ecosystems: |
         c12n:
-          dir: .
+          dir: go
           ecosystem: go
           mirror: hop-top/c12n
+        c12n-core:
+          dir: core
+          ecosystem: rs
+          package: hop-top-c12n-core
+          mirror: hop-top/c12n-core
+          rust-toolchain: stable
+        c12n-rs:
+          dir: rs
+          ecosystem: rs
+          package: hop-top-c12n
+          mirror: hop-top/c12n-rs
+          rust-toolchain: stable
+        c12n-py:
+          dir: py
+          ecosystem: py
+          package: hop-top-c12n
+          mirror: hop-top/c12n-py
+          python-version: '3.11'
+          test-command: pip install pytest && PYTHONPATH=python pytest -q
+          pypi-auth: token
         c12n-ts:
-          dir: c12n-ts
+          dir: ts
           ecosystem: ts
           package: "@hop-top/c12n"
           mirror: hop-top/c12n-ts
           node-version: '22'
         c12n-php:
-          dir: c12n-php
+          dir: php
           ecosystem: php
           package: hop-top/c12n
           mirror: hop-top/c12n-php

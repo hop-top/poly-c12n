@@ -10,9 +10,9 @@ c12n already ships three language surfaces over the `c12n-core` Rust crate:
 
 | Surface | Path | Binding mechanism |
 |---------|------|-------------------|
-| Rust    | `c12n-core/`         | native crate, tokio runtime in-process |
-| Go      | `c12n_cgo.go`        | cgo over the C ABI in `c12n-core/src/ffi.rs` |
-| Python  | `c12n-py/src/lib.rs` | PyO3, holds a tokio `Runtime` per pipeline |
+| Rust    | `core/`         | native crate, tokio runtime in-process |
+| Go      | `c12n_cgo.go`        | cgo over the C ABI in `core/src/ffi.rs` |
+| Python  | `py/src/lib.rs` | PyO3, holds a tokio `Runtime` per pipeline |
 
 The hop-top fleet pattern (see `kit/sdk/`) ships five language SDKs per tool. c12n
 is missing TypeScript and PHP. This ADR decides how `c12n-ts` (the npm package
@@ -53,7 +53,7 @@ The six locked sub-decisions:
 2. **Package name: `@hop-top/c12n`.** Matches `@hop-top/kit` (kit-ts).
 3. **Versioning: linked-versions** with `c12n`, `c12n-core`, `c12n-py`, and
    `c12n-php`. All bump together via `release-please-config.json`'s
-   `linked-versions` group. The first c12n-ts tag is `c12n-ts/v0.1.0-alpha.0`,
+   `linked-versions` group. The first c12n-ts tag is `ts/v0.1.0-alpha.0`,
    cut after `c12n/v…`'s initial release.
 4. **Windows: shipped at v0.1.0-alpha.0.** WASM is OS-agnostic so Windows is free.
    CI matrix runs ubuntu + macOS + Windows for the ts build+test job (parity with
@@ -170,10 +170,10 @@ SDK. Doesn't run in browsers / Workers / Deno at all (no subprocess primitive).
 
 ## References
 
-- `c12n-core/src/ffi.rs` — C ABI surface c12n-ts must replace with wasm-bindgen
+- `core/src/ffi.rs` — C ABI surface c12n-ts must replace with wasm-bindgen
   equivalents.
 - `c12n_cgo.go` — Go binding for parity reference (the surface TS mirrors).
-- `c12n-py/src/lib.rs` — Python binding showing the per-pipeline tokio runtime
+- `py/src/lib.rs` — Python binding showing the per-pipeline tokio runtime
   pattern that c12n-ts must adapt for single-threaded WASM.
 - `kit/sdk/ts/` — kit-ts packaging shape (`@hop-top/kit`) that c12n-ts mirrors
   for `package.json`, `tsconfig.json`, `eslint.config.mjs`, `src/`, `test/`.

@@ -16,7 +16,7 @@ coverage gap and matches the hop-top fleet's "one tool per language" convention
 
 Unlike `kit-php` — pure-PHP, no native dependency — c12n-php is FFI-driven: it
 loads `libc12n_core.{so,dylib,dll}` via PHP's `FFI::cdef` against a C header
-derived from `c12n-core/src/ffi.rs`. The FFI surface is small and stable:
+derived from `core/src/ffi.rs`. The FFI surface is small and stable:
 `c12n_pipeline_new`, `c12n_pipeline_evaluate`, `c12n_pipeline_free`,
 `c12n_result_free`, `c12n_result_json` — JSON in, JSON out, opaque pointer for
 the pipeline.
@@ -77,7 +77,7 @@ from the meta-tooling — rejected because the org split adds discovery friction
 
 ### 2. cbindgen — correct-by-construction headers
 
-The Rust FFI surface evolves. `c12n-core/src/ffi.rs` already exposes five
+The Rust FFI surface evolves. `core/src/ffi.rs` already exposes five
 functions; future signal types will add more. Two mechanisms keep a C header
 in sync:
 
@@ -117,7 +117,7 @@ Three patterns exist in the wild:
 - **Composer post-install script** (chosen) — runs after `composer install`,
   detects host OS/arch, downloads the matching tarball from GitHub Releases,
   verifies SHA256 against an embedded manifest, extracts into
-  `vendor/hop-top/c12n-php/runtime/` (composer-relative cache). End user runs
+  `vendor/hop-top/php/runtime/` (composer-relative cache). End user runs
   `composer install`; everything else is automatic. Same UX as Python wheels
   (`pip install` fetches the wheel) and npm prebuilds (`npm install` fetches
   via `prebuild-install`). Failure modes: GitHub outage, hash mismatch,
@@ -138,7 +138,7 @@ Three patterns exist in the wild:
 The runtime path resolver walks, in order:
 
 1. `getenv('C12N_CORE_LIB_PATH')` — explicit override for airgapped envs.
-2. composer-managed cache dir: `vendor/hop-top/c12n-php/runtime/lib/libc12n_core.<ext>`.
+2. composer-managed cache dir: `vendor/hop-top/php/runtime/lib/libc12n_core.<ext>`.
 3. system library path (`/usr/local/lib`, `/usr/lib`) — for distro-packaged
    installs.
 
@@ -147,7 +147,7 @@ and the override env-var name in the message.
 
 #### Cache dir choice (open implementation question)
 
-`vendor/hop-top/c12n-php/runtime/` keeps the artifact composer-relative, which
+`vendor/hop-top/php/runtime/` keeps the artifact composer-relative, which
 makes `vendor/`-archive deploys (the common Composer immutable-deploy pattern)
 self-contained. The alternative — `~/.composer/cache/c12n/` — survives
 `composer install --no-dev` rebuilds but breaks containerised deploys that
@@ -285,7 +285,7 @@ on the same cdylib. Deferred to T-0153 once we have adoption signal.
 ### FFI surface consumed
 
 c12n-php's `FFI::cdef` will consume `libc12n_core.h` (cbindgen-emitted) and
-expose four PHP-visible functions matching `c12n-core/src/ffi.rs`:
+expose four PHP-visible functions matching `core/src/ffi.rs`:
 
 ```c
 void* c12n_pipeline_new(const char* config_json);
@@ -301,7 +301,7 @@ exists in Rust for API completeness but PHP reads the `char*` directly via
 ### Package layout
 
 ```text
-c12n-php/
+php/
 ├── composer.json              # name: hop-top/c12n-php; require: php ^8.1, hop-top/kit ^0.4
 ├── phpunit.xml
 ├── src/
@@ -327,7 +327,7 @@ artifact-upload pattern c12n-go uses).
 
 - `plan.md` §"Locked decisions (2026-05-18)" — source of the seven decisions
   ratified here.
-- `c12n-core/src/ffi.rs` — Rust source cbindgen will parse.
+- `core/src/ffi.rs` — Rust source cbindgen will parse.
 - `kit/hops/main/sdk/experimental/php/composer.json` — canonical kit-php
   manifest shape, copied for c12n-php structure.
 - ADR-0001 — c12n-ts WASM binding (sibling decision, same fleet context).

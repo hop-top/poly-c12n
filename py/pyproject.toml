@@ -3,13 +3,15 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "c12n"
-version = "0.1.0"
+name = "hop-top-c12n"
+version = "0.1.0-alpha.0"
+description = "c12n classification engine — Python bindings"
 requires-python = ">=3.9"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
 python-source = "python"
+module-name = "c12n"
 
 [tool.pytest.ini_options]
 markers = [

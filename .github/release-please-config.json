@@ -17,28 +17,32 @@
     {"type": "ci", "section": "CI", "hidden": true},
     {"type": "build", "section": "Build", "hidden": true}
   ],
-  "linked-versions": [
-    {
-      "group": "c12n",
-      "components": ["c12n", "c12n-core", "c12n-py", "c12n-ts", "c12n-php"]
-    }
-  ],
   "packages": {
     ".": {
+      "release-type": "simple",
+      "component": "c12n-poly",
+      "changelog-path": "CHANGELOG.md",
+      "bump-minor-pre-major": true,
+      "exclude-paths": ["core", "go", "py", "rs", "ts", "php"],
+      "prerelease": true,
+      "prerelease-type": "alpha.0",
+      "versioning": "prerelease",
+      "initial-version": "0.1.0-alpha.0"
+    },
+    "go": {
       "release-type": "go",
       "component": "c12n",
       "changelog-path": "CHANGELOG.md",
       "bump-minor-pre-major": true,
-      "exclude-paths": ["c12n-core", "c12n-py", "c12n-ts", "c12n-php"],
       "prerelease": true,
       "prerelease-type": "alpha.0",
       "versioning": "prerelease",
       "initial-version": "0.1.0-alpha.0"
     },
-    "c12n-core": {
+    "core": {
       "release-type": "rust",
       "component": "c12n-core",
-      "package-name": "c12n-core",
+      "package-name": "hop-top-c12n-core",
       "changelog-path": "CHANGELOG.md",
       "bump-minor-pre-major": true,
       "prerelease": true,
@@ -46,16 +50,27 @@
       "versioning": "prerelease",
       "initial-version": "0.1.0-alpha.0"
     },
-    "c12n-py": {
+    "rs": {
+      "release-type": "rust",
+      "component": "c12n-rs",
+      "package-name": "hop-top-c12n",
+      "changelog-path": "CHANGELOG.md",
+      "bump-minor-pre-major": true,
+      "prerelease": true,
+      "prerelease-type": "alpha.0",
+      "versioning": "prerelease",
+      "initial-version": "0.1.0-alpha.0"
+    },
+    "py": {
       "release-type": "python",
       "component": "c12n-py",
-      "package-name": "c12n",
+      "package-name": "hop-top-c12n",
       "changelog-path": "CHANGELOG.md",
       "bump-minor-pre-major": true,
       "extra-files": [
         {
           "type": "toml",
-          "path": "pyproject.toml",
+          "path": "py/pyproject.toml",
           "jsonpath": "$.project.version"
         }
       ],
@@ -64,7 +79,7 @@
       "versioning": "prerelease",
       "initial-version": "0.1.0-alpha.0"
     },
-    "c12n-ts": {
+    "ts": {
       "release-type": "node",
       "component": "c12n-ts",
       "package-name": "@hop-top/c12n",
@@ -73,7 +88,7 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "c12n-ts/package.json",
+          "path": "ts/package.json",
           "jsonpath": "$.version"
         }
       ],
@@ -82,7 +97,7 @@
       "versioning": "prerelease",
       "initial-version": "0.1.0-alpha.0"
     },
-    "c12n-php": {
+    "php": {
       "release-type": "php",
       "component": "c12n-php",
       "package-name": "hop-top/c12n",
@@ -91,7 +106,7 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "c12n-php/composer.json",
+          "path": "php/composer.json",
           "jsonpath": "$.version"
         }
       ],

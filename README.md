@@ -1,38 +1,58 @@
-# c12n
+# poly-c12n
 
 LLM request classification engine for intelligent model routing.
 
 > [!WARNING]
 > **Alpha — API and tag history may break.** First published line is
-> `c12n*/v0.1.x-alpha.*`. Pin to exact tags, not ranges. Breaking
+> `<component>/v0.1.x-alpha.*`. Pin to exact tags, not ranges. Breaking
 > changes may land between alpha tags; see [`CHANGELOG.md`](CHANGELOG.md).
 
 ## What
 
-c12n classifies LLM requests via 20 signal types so callers can
-route requests to the right model — cheap models for simple
-queries, capable models for complex ones.
+c12n analyzes LLM requests via 20 signal types so callers can route
+them to the right model — cheap models for simple queries, capable
+models for complex ones.
 
-Polyglot monorepo: Rust execution engine, Go + Python bindings, Pkl
-config schema-of-record.
+Polyglot monorepo. The canonical repo is **`hop-top/poly-c12n`**; each
+language sub-tree mirrors to a read-only repo for that language's
+ecosystem:
+
+| Dir | Mirror | Registry artifact | Tag prefix |
+|---|---|---|---|
+| `core/` | `hop-top/c12n-core` | crates.io `hop-top-c12n-core` (engine) | `c12n-core/v*` |
+| `go/` | `hop-top/c12n` | Go module `hop.top/c12n` | `c12n/v*` |
+| `rs/` | `hop-top/c12n-rs` | crates.io `hop-top-c12n` (SDK) | `c12n-rs/v*` |
+| `py/` | `hop-top/c12n-py` | PyPI `hop-top-c12n` | `c12n-py/v*` |
+| `ts/` | `hop-top/c12n-ts` | npm `@hop-top/c12n` | `c12n-ts/v*` |
+| `php/` | `hop-top/c12n-php` | packagist `hop-top/c12n` | `c12n-php/v*` |
+
+Each language ships **independently** — no linked-versions group.
 
 ## Layout
 
 ```
-config.pkl          Schema-of-record (Pkl) → embedded YAML defaults
-c12n-core/          Rust execution engine (lib + cdylib)
-  src/signal.rs     Signal trait
-  src/pipeline.rs   Fan-out/fan-in orchestrator
-  src/embedding.rs  EmbeddingEngine trait + cosine sim
-  src/prototype.rs  PrototypeBank scoring
-  src/ffi.rs        C ABI (JSON in/out)
-  src/signals/      15 signal implementations (20 types total)
-*.go                Go bindings (hop.top/c12n) — cgo + stub modes
-cmd/c12n/           Go CLI binary
-c12n-py/            Python bindings (PyO3 + pure Python middleware)
+poly-c12n/
+├── core/         Rust execution engine (lib + cdylib) → libc12n_core.{so,dylib,dll}
+│   ├── src/signal.rs       Signal trait
+│   ├── src/pipeline.rs     Fan-out / fan-in orchestrator
+│   ├── src/embedding.rs    EmbeddingEngine trait + cosine sim
+│   ├── src/prototype.rs    PrototypeBank scoring
+│   ├── src/ffi.rs          C ABI (JSON in/out)
+│   ├── src/wasm.rs         #[wasm_bindgen] surface (for c12n-ts)
+│   ├── src/signals/        15 signal implementations
+│   └── include/libc12n_core.h   cbindgen-generated header (PHP FFI consumes)
+├── go/           Go bindings (hop.top/c12n) — cgo + stub modes
+│   ├── *.go                Pipeline, ClassificationContext, Result
+│   └── cmd/c12n/           CLI binary
+├── rs/           Rust SDK (hop-top-c12n) — ergonomic layer over core
+├── py/           Python bindings (hop-top-c12n) — PyO3 + pure Python
+├── ts/           TypeScript bindings (@hop-top/c12n) — WASM via wasm-bindgen
+├── php/          PHP bindings (hop-top/c12n) — FFI over libc12n_core
+├── docs/         ADRs, personas, stories
+└── (Cargo workspace at root: core/ + py/ + rs/)
 ```
 
-## Install
+## Install (per language)
 
 ### Go
 
@@ -41,32 +61,46 @@ go get hop.top/c12n@latest
 ```
 
 Two build modes:
+- **stub** (`CGO_ENABLED=0`): types + config + CLI work; `Pipeline.Evaluate`
+  returns `errNoCgo`.
+- **cgo** (`CGO_ENABLED=1`): links `libc12n_core.{so,dylib,dll}` from the
+  Rust engine. Real classification.
 
-- **stub** (`CGO_ENABLED=0`): types, config, parsing, and CLI all
-  work; `Pipeline.Evaluate` returns `errNoCgo`. Useful for tooling
-  that consumes types without needing the engine.
-- **cgo** (`CGO_ENABLED=1`): links `libc12n_core.{so,dylib}` from
-  the Rust core. Real classification.
+### Rust (SDK)
+
+```toml
+[dependencies]
+hop-top-c12n = "0.1.0-alpha.0"
+```
+
+### Rust (engine — direct, advanced)
+
+```toml
+[dependencies]
+hop-top-c12n-core = "0.1.0-alpha.0"
+```
 
 ### Python
 
 ```bash
-pip install c12n
-# or for development:
-cd c12n-py && maturin develop
+pip install hop-top-c12n
 ```
 
-### Rust
+### TypeScript / JavaScript
 
-```toml
-# Cargo.toml
-[dependencies]
-c12n-core = "0.1.0-alpha.0"
+```bash
+npm install @hop-top/c12n
 ```
 
-## Quick start
+### PHP
 
-### Go
+```bash
+composer require hop-top/c12n
+```
+
+PHP 8.1+ with `ext-ffi` required.
+
+## Quickstart (Go)
 
 ```go
 import "hop.top/c12n"
@@ -80,29 +114,9 @@ defer pipeline.Close()
 result, _ := pipeline.Evaluate(c12n.ClassificationContext{
     Text: "Write a Python function to sort a list",
 })
-// result.Signal(c12n.SignalCodeContent), result.Confidence(), ...
 ```
 
-### Python
-
-```python
-from c12n import Pipeline
-
-pipeline = Pipeline(max_concurrency=8, timeout_ms=5000)
-result = pipeline.evaluate("Write a Python function to sort a list")
-print(result.json())
-```
-
-### CLI
-
-```bash
-c12n classify "Write a Python function"   # classify text
-c12n bench --iterations 100               # benchmark pipeline
-c12n init                                 # initialize config
-c12n doctor                               # diagnose environment
-```
-
-## Build
+## Build (monorepo)
 
 ```bash
 make build       # cargo build --workspace + go build
@@ -122,28 +136,20 @@ make check       # lint + test (CI gate)
 | Cost      | CostEstimate                             |
 | Reserved  | Sentiment, Intent, Topic, Custom         |
 
-## Ecosystem dependencies
+## Toolchain
 
-| Package      | Purpose                                  |
-|--------------|------------------------------------------|
-| hop.top/kit  | CLI, config, logging, output (Go)        |
-| hop.top/xrr  | Record/replay test cassettes (Go)        |
-
-## Status
-
-- **Modules:**
-  - `hop.top/c12n` (Go, tag `c12n/v*`)
-  - `c12n-core` (Rust, tag `c12n-core/v*`)
-  - `c12n` PyPI (Python, tag `c12n-py/v*`)
-- **First published tags:** `c12n/v0.1.0-alpha.0`,
-  `c12n-core/v0.1.0-alpha.0`, `c12n-py/v0.1.0-alpha.0` (linked
-  versions — bump together)
-- **Toolchain:** Go 1.26+, Rust 1.85+, Python 3.9+
+- Go 1.26+
+- Rust 1.85+
+- Python 3.9+
+- Node 20+
+- PHP 8.3+
 
 ## Docs
 
-- [Personas](docs/personas/README.md) — who uses c12n
-- [Stories](docs/stories/README.md) — user stories with linked tests
+- [ADR-0001: c12n-ts WASM binding](docs/adr/0001-c12n-ts-wasm-binding.md)
+- [ADR-0002: c12n-php FFI binding](docs/adr/0002-c12n-php-ffi-binding.md)
+- [Personas](docs/personas/README.md)
+- [Stories](docs/stories/README.md)
 
 ## License
 

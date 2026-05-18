@@ -10,11 +10,12 @@ project_name: c12n
 
 before:
   hooks:
-    - go mod download
+    - sh -c "cd go && go mod download"
 
 builds:
   - id: c12n
     main: ./cmd/c12n
+    dir: ./go
     binary: c12n
     env:
       - CGO_ENABLED=0
@@ -60,14 +61,15 @@ brews:
       name: homebrew-c12n
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    homepage: https://github.com/hop-top/c12n
+    homepage: https://github.com/hop-top/poly-c12n
     description: "LLM request classification engine CLI"
     license: MIT
     # {{ .Env.RELEASE_TAG }} is the literal `c12n/v<version>` tag,
     # which is the path segment GitHub Releases use for asset
     # downloads. {{.Tag}} here would resolve to the synthesized
-    # bare tag — wrong for the URL.
-    url_template: "https://github.com/hop-top/c12n/releases/download/{{ .Env.RELEASE_TAG }}/{{ .ArtifactName }}"
+    # bare tag — wrong for the URL. Releases live on the canonical
+    # repo (hop-top/poly-c12n).
+    url_template: "https://github.com/hop-top/poly-c12n/releases/download/{{ .Env.RELEASE_TAG }}/{{ .ArtifactName }}"
     install: bin.install "c12n"
     test: |
       system "#{bin}/c12n", "--version"

@@ -2,11 +2,13 @@
 
 package c12n
 
-// Requires libc12n_core built from the Rust c12n-core crate.
-// Build: cd <repo-root> && cargo build (produces target/debug/libc12n_core.{so,dylib})
+// Requires libc12n_core built from the Rust c12n-core engine.
+// Build: cd <repo-root> && cargo build (produces target/debug/libc12n_core.{so,dylib,dll})
+// The Rust workspace lives at <repo-root> (one level above this go/ dir);
+// the cdylib is at <repo-root>/target/debug — hence ../target/debug.
 
 /*
-#cgo LDFLAGS: -L${SRCDIR}/target/debug -lc12n_core
+#cgo LDFLAGS: -L${SRCDIR}/../target/debug -lc12n_core
 #include <stdlib.h>
 
 extern void* c12n_pipeline_new(const char* config_json);
