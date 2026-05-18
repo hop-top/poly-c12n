@@ -26,3 +26,27 @@ jobs:
           dir: .
           ecosystem: go
           mirror: hop-top/c12n
+        c12n-ts:
+          dir: c12n-ts
+          ecosystem: ts
+          package: "@hop-top/c12n"
+          mirror: hop-top/c12n-ts
+          node-version: '22'
+        c12n-php:
+          dir: c12n-php
+          ecosystem: php
+          package: hop-top/c12n
+          mirror: hop-top/c12n-php
+
+  goreleaser:
+    # Fires only on the bare Go CLI tag (e.g. c12n/v0.1.0-alpha.0).
+    # Library tags such as c12n-ts/v*, c12n-py/v*, c12n-rs/v*,
+    # c12n-php/v*, c12n-core/v* are excluded.
+    if: startsWith(github.ref_name, 'c12n/v') && !startsWith(github.ref_name, 'c12n-')
+    permissions:
+      contents: write
+    uses: hop-top/.github/.github/workflows/goreleaser-on-tag.yml@v0
+    secrets:
+      GH_PAT: ${{ secrets.GH_PAT }}
+    with:
+      homebrew-tap-repo: homebrew-c12n
