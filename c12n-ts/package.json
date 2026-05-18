@@ -1,0 +1,66 @@
+{
+  "name": "@hop-top/c12n",
+  "version": "0.0.0",
+  "description": "TypeScript bindings for c12n-core — classification pipeline via WebAssembly",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./nodejs": {
+      "types": "./dist/nodejs.d.ts",
+      "import": "./dist/nodejs.js",
+      "require": "./dist/nodejs.cjs"
+    }
+  },
+  "scripts": {
+    "build:wasm:bundler": "wasm-pack build ../c12n-core --target bundler --features wasm --no-default-features --out-dir ../c12n-ts/pkg/bundler",
+    "build:wasm:nodejs": "wasm-pack build ../c12n-core --target nodejs --features wasm --no-default-features --out-dir ../c12n-ts/pkg/nodejs",
+    "build:ts": "tsc --build",
+    "build": "pnpm build:wasm:bundler && pnpm build:wasm:nodejs && pnpm build:ts",
+    "test": "vitest run",
+    "lint": "eslint src test",
+    "lint:fix": "eslint src test --fix"
+  },
+  "dependencies": {
+    "@hop-top/kit": "^0.4.0-alpha"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "eslint": "^10.2.0",
+    "typescript": "^5",
+    "typescript-eslint": "^8.58.0",
+    "vitest": "^1"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "pkg",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hop-top/c12n.git",
+    "directory": "c12n-ts"
+  },
+  "keywords": [
+    "classification",
+    "wasm",
+    "c12n",
+    "hop-top",
+    "signal",
+    "pipeline"
+  ]
+}
