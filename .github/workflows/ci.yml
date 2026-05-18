@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  rust:
+    name: Rust core
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy -p c12n-core -- -D warnings
+      - name: test
+        run: cargo test -p c12n-core
+      - name: build cdylib
+        run: cargo build -p c12n-core --release
+      - name: upload libc12n_core
+        uses: actions/upload-artifact@v4
+        with:
+          name: libc12n_core-${{ runner.os }}
+          path: |
+            target/release/libc12n_core.so
+            target/release/libc12n_core.dylib
+            target/release/libc12n_core.dll
+          if-no-files-found: ignore
+
+  go-stub:
+    name: Go (stub)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GOPRIVATE: "hop.top/*,github.com/hop-top/*"
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure private modules
+        env:
+          TOKEN: ${{ secrets.GH_PAT || github.token }}
+        run: |
+          git config --global url."https://${TOKEN}@github.com/hop-top".insteadOf "https://github.com/hop-top"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "gofmt needed:"; gofmt -l .; exit 1
+          fi
+      - name: vet
+        run: go vet ./...
+      - name: test
+        run: go test -race -count=1 ./...
+
+  go-cgo:
+    name: Go (cgo)
+    needs: rust
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GOPRIVATE: "hop.top/*,github.com/hop-top/*"
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure private modules
+        env:
+          TOKEN: ${{ secrets.GH_PAT || github.token }}
+        run: |
+          git config --global url."https://${TOKEN}@github.com/hop-top".insteadOf "https://github.com/hop-top"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v4
+        with:
+          name: libc12n_core-${{ runner.os }}
+          path: target/release/
+      - name: test
+        env:
+          CGO_LDFLAGS: "-L${{ github.workspace }}/target/release"
+          LD_LIBRARY_PATH: "${{ github.workspace }}/target/release"
+        run: go test -race -count=1 ./...
+
+  python:
+    name: Python bindings
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: install deps
+        run: pip install pytest
+      - name: test
+        env:
+          PYTHONPATH: python
+        run: |
+          cd c12n-py
+          pytest -q
