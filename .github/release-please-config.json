@@ -20,7 +20,7 @@
   "linked-versions": [
     {
       "group": "c12n",
-      "components": ["c12n", "c12n-core", "c12n-py"]
+      "components": ["c12n", "c12n-core", "c12n-py", "c12n-ts", "c12n-php"]
     }
   ],
   "packages": {
@@ -29,7 +29,7 @@
       "component": "c12n",
       "changelog-path": "CHANGELOG.md",
       "bump-minor-pre-major": true,
-      "exclude-paths": ["c12n-core", "c12n-py"],
+      "exclude-paths": ["c12n-core", "c12n-py", "c12n-ts", "c12n-php"],
       "prerelease": true,
       "prerelease-type": "alpha.0",
       "versioning": "prerelease",
@@ -57,6 +57,42 @@
           "type": "toml",
           "path": "pyproject.toml",
           "jsonpath": "$.project.version"
+        }
+      ],
+      "prerelease": true,
+      "prerelease-type": "alpha.0",
+      "versioning": "prerelease",
+      "initial-version": "0.1.0-alpha.0"
+    },
+    "c12n-ts": {
+      "release-type": "node",
+      "component": "c12n-ts",
+      "package-name": "@hop-top/c12n",
+      "changelog-path": "CHANGELOG.md",
+      "bump-minor-pre-major": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "c12n-ts/package.json",
+          "jsonpath": "$.version"
+        }
+      ],
+      "prerelease": true,
+      "prerelease-type": "alpha.0",
+      "versioning": "prerelease",
+      "initial-version": "0.1.0-alpha.0"
+    },
+    "c12n-php": {
+      "release-type": "php",
+      "component": "c12n-php",
+      "package-name": "hop-top/c12n",
+      "changelog-path": "CHANGELOG.md",
+      "bump-minor-pre-major": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "c12n-php/composer.json",
+          "jsonpath": "$.version"
         }
       ],
       "prerelease": true,
