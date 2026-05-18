@@ -9,6 +9,7 @@
     "hop-top/kit": "^0.4"
   },
   "require-dev": {
+    "composer/composer": "^2.0",
     "phpunit/phpunit": "^11.0"
   },
   "autoload": {
@@ -33,7 +34,7 @@
   "extra": {
     "c12n-core": {
       "version": "0.1.0-alpha.0",
-      "release-url-template": "https://github.com/hop-top/c12n/releases/download/{tag}/libc12n_core-{os}-{arch}.tar.gz"
+      "release-url-template": "https://github.com/hop-top/poly-c12n/releases/download/{tag}/libc12n_core-{os}-{arch}.tar.gz"
     }
   },
   "config": {
