@@ -8,8 +8,12 @@ on:
 
 jobs:
   rust:
-    name: Rust core
-    runs-on: ubuntu-latest
+    name: Rust core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     permissions:
       contents: read
     steps:
@@ -29,16 +33,21 @@ jobs:
       - name: upload libc12n_core
         uses: actions/upload-artifact@v4
         with:
-          name: libc12n_core-${{ runner.os }}
+          name: libc12n_core-${{ runner.os }}-${{ runner.arch }}
           path: |
             target/release/libc12n_core.so
             target/release/libc12n_core.dylib
+            target/release/c12n_core.dll
             target/release/libc12n_core.dll
           if-no-files-found: ignore
 
   go-stub:
-    name: Go (stub)
-    runs-on: ubuntu-latest
+    name: Go (stub, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     permissions:
       contents: read
     env:
@@ -47,6 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Configure private modules
+        shell: bash
         env:
           TOKEN: ${{ secrets.GH_PAT || github.token }}
         run: |
@@ -55,6 +65,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: gofmt
+        if: runner.os != 'Windows'
         run: |
           if [ -n "$(gofmt -l .)" ]; then
             echo "gofmt needed:"; gofmt -l .; exit 1
@@ -63,11 +74,17 @@ jobs:
         run: go vet ./...
       - name: test
         run: go test -race -count=1 ./...
+      - name: build CLI
+        run: go build -o bin/c12n ./cmd/c12n
 
   go-cgo:
-    name: Go (cgo)
+    name: Go (cgo, ${{ matrix.os }})
     needs: rust
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     permissions:
       contents: read
     env:
@@ -76,6 +93,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Configure private modules
+        shell: bash
         env:
           TOKEN: ${{ secrets.GH_PAT || github.token }}
         run: |
@@ -83,19 +101,40 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Install MinGW (Windows)
+        if: runner.os == 'Windows'
+        uses: egor-tensin/setup-mingw@v2
+        with:
+          platform: x64
       - uses: actions/download-artifact@v4
         with:
-          name: libc12n_core-${{ runner.os }}
+          name: libc12n_core-${{ runner.os }}-${{ runner.arch }}
           path: target/release/
-      - name: test
+      - name: test (unix)
+        if: runner.os != 'Windows'
         env:
           CGO_LDFLAGS: "-L${{ github.workspace }}/target/release"
           LD_LIBRARY_PATH: "${{ github.workspace }}/target/release"
+          DYLD_LIBRARY_PATH: "${{ github.workspace }}/target/release"
         run: go test -race -count=1 ./...
+      - name: test (windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          CGO_LDFLAGS: "-L${{ github.workspace }}/target/release"
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          # Ensure the DLL is on PATH so the loader can find it at test time.
+          export PATH="$WORKSPACE/target/release:$PATH"
+          go test -race -count=1 ./...
 
   python:
-    name: Python bindings
-    runs-on: ubuntu-latest
+    name: Python bindings (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     permissions:
       contents: read
     steps:
@@ -106,8 +145,89 @@ jobs:
       - name: install deps
         run: pip install pytest
       - name: test
+        shell: bash
         env:
           PYTHONPATH: python
         run: |
           cd c12n-py
           pytest -q
+
+  ts-bindings:
+    name: TS bindings (${{ matrix.os }})
+    if: hashFiles('c12n-ts/package.json') != ''
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: c12n-ts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: install wasm-pack
+        shell: bash
+        run: |
+          # Use the upstream installer on posix; cargo install on Windows.
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cargo install wasm-pack --locked
+          else
+            curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+          fi
+      - name: wasm-pack build
+        shell: bash
+        working-directory: c12n-ts
+        run: wasm-pack build --target bundler --release
+      - name: install JS deps
+        shell: bash
+        working-directory: c12n-ts
+        run: pnpm install --frozen-lockfile
+      - name: vitest
+        shell: bash
+        working-directory: c12n-ts
+        run: pnpm vitest run
+
+  php-bindings:
+    name: PHP bindings (PHP ${{ matrix.php }}, ${{ matrix.os }})
+    if: hashFiles('c12n-php/composer.json') != ''
+    needs: rust
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        php: ["8.1", "8.2", "8.3"]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: ffi
+          ini-values: ffi.enable=true
+          coverage: none
+      - uses: actions/download-artifact@v4
+        with:
+          name: libc12n_core-${{ runner.os }}-${{ runner.arch }}
+          path: c12n-php/runtime/lib/
+      - name: composer install
+        working-directory: c12n-php
+        run: composer install --no-interaction --prefer-dist
+      - name: phpunit
+        working-directory: c12n-php
+        env:
+          C12N_CORE_LIB_PATH: ${{ github.workspace }}/c12n-php/runtime/lib
+        run: vendor/bin/phpunit
