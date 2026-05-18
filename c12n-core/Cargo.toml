@@ -7,13 +7,38 @@ build = "build.rs"
 [lib]
 crate-type = ["lib", "cdylib"]
 
+[features]
+default = []
+# Enable WebAssembly bindings (consumed by c12n-ts).
+# Swaps the multi-threaded tokio runtime for a single-threaded executor
+# and exposes a `wasm` module with `#[wasm_bindgen]` types parallel to
+# the cgo/PyO3 surface in `ffi.rs`. See ADR-0001.
+wasm = [
+    "dep:wasm-bindgen",
+    "dep:serde-wasm-bindgen",
+    "dep:console_error_panic_hook",
+]
+
 [dependencies]
 async-trait = "0.1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "time", "macros"] }
+# Shared (target-agnostic) tokio feature set. `rt-multi-thread` is added only
+# on non-wasm32 targets below — tokio rejects that feature on wasm32 with a
+# compile_error!. Native `ffi.rs` (cgo + PyO3) still gets the multi-threaded
+# runtime via the non-wasm32 target table.
+tokio = { version = "1", features = ["sync", "rt", "time", "macros"] }
+wasm-bindgen = { version = "0.2", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+
+# Non-wasm builds (host targets: cgo + PyO3 surfaces) layer on the
+# multi-threaded runtime that `ffi.rs` calls `tokio::runtime::Runtime::new()`
+# against. Cargo unions features across this section and `[dependencies]`.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["rt-multi-thread"] }
 
 [build-dependencies]
 cbindgen = "0.27"
