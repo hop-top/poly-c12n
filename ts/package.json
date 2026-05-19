@@ -24,9 +24,10 @@
     "build:wasm:test": "wasm-pack build ../core --target nodejs --out-dir ../ts/pkg/nodejs -- --features wasm --no-default-features",
     "build:ts": "tsc --build",
     "build": "pnpm build:wasm:bundler && pnpm build:wasm:nodejs && pnpm build:ts",
-    "test": "vitest run",
+    "test": "vitest run --exclude test/bundler-smoke.test.ts",
     "test:unit": "vitest run test/pipeline.test.ts",
     "test:integration": "pnpm build:wasm:test && vitest run test/pipeline.integration.test.ts",
+    "test:bundler": "pnpm build:wasm:bundler && vitest run --config vitest.browser.config.ts",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix"
   },
@@ -35,7 +36,9 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@vitest/browser": "^1",
     "eslint": "^10.2.0",
+    "playwright": "^1.44.0",
     "typescript": "^5",
     "typescript-eslint": "^8.58.0",
     "vitest": "^1"

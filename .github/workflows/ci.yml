@@ -203,10 +203,20 @@ jobs:
         shell: bash
         working-directory: ts
         run: pnpm install --frozen-lockfile
-      - name: vitest
+      - name: vitest (nodejs target)
         shell: bash
         working-directory: ts
-        run: pnpm vitest run
+        run: pnpm vitest run --exclude test/bundler-smoke.test.ts
+      - name: install playwright chromium
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        shell: bash
+        working-directory: ts
+        run: pnpm exec playwright install --with-deps chromium
+      - name: vitest (bundler target, browser)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        shell: bash
+        working-directory: ts
+        run: pnpm test:bundler
 
   php-bindings:
     name: PHP bindings (PHP ${{ matrix.php }}, ${{ matrix.os }})
