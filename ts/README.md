@@ -127,12 +127,37 @@ pnpm build:ts
 # Full build (wasm + TS)
 pnpm build
 
-# Test (vitest, no wasm required for smoke tests)
+# Run pure-TS unit tests (no wasm required)
+pnpm test:unit
+
+# Run real-wasm integration tests (builds wasm first)
+pnpm test:integration
+
+# Run both (integration tests auto-skip if pkg/nodejs/ is absent)
 pnpm test
 
 # Lint
 pnpm lint
 ```
+
+### Test layout
+
+- `test/pipeline.test.ts` — pure-TS smoke tests (`normalizeContext`,
+  `parseResult`, type surface). Always run; do not require wasm.
+- `test/pipeline.integration.test.ts` — real-wasm tests covering
+  classification roundtrip, error paths, lifecycle logging, and JSON
+  shape parity with the Go (`go/integration_test.go`) and Python
+  (`py/tests/test_integration.py`) surfaces.
+- `test/setup.ts` — shared `hasWasm()` artifact check + `wasmRuntimeOk()`
+  runtime probe. Integration tests gate on the latter so a broken
+  wasm runtime (e.g. tokio's `time` panicking on wasm32) skips loudly
+  with a diagnostic message rather than hard-failing CI.
+
+The integration test file is **safe to ship without wasm-pack
+installed**: if `pkg/nodejs/c12n_core.js` is missing, every test in
+that file is skipped. Downstream consumers running `pnpm test` get the
+pure-TS smoke tests without needing rustup or wasm-pack on their
+machine.
 
 Prereqs for the wasm build:
 
