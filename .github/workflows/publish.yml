@@ -69,4 +69,5 @@ jobs:
     secrets:
       GH_PAT: ${{ secrets.GH_PAT }}
     with:
-      homebrew-tap-repo: homebrew-c12n
+      homebrew-tap-repo: homebrew-tap
+      scoop-bucket-repo: scoop-bucket

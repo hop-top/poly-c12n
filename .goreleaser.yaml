@@ -58,7 +58,7 @@ brews:
   - name: c12n
     repository:
       owner: hop-top
-      name: homebrew-c12n
+      name: homebrew-tap
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: https://github.com/hop-top/poly-c12n
@@ -73,3 +73,15 @@ brews:
     install: bin.install "c12n"
     test: |
       system "#{bin}/c12n", "--version"
+
+scoops:
+  - name: c12n
+    repository:
+      owner: hop-top
+      name: scoop-bucket
+      branch: main
+      token: "{{ .Env.SCOOP_BUCKET_TOKEN }}"
+    homepage: https://github.com/hop-top/poly-c12n
+    description: "LLM request classification engine CLI"
+    license: MIT
+    url_template: "https://github.com/hop-top/poly-c12n/releases/download/{{ .Env.RELEASE_TAG }}/{{ .ArtifactName }}"
