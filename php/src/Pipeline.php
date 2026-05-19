@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace HopTop\C12n;
 
-use FFI;
+use FFI as PhpFfi;
 use HopTop\C12n\Exception\PipelineException;
 use HopTop\Kit\Output\Output as KitOutput;
 
@@ -28,8 +28,8 @@ use HopTop\Kit\Output\Output as KitOutput;
  */
 final class Pipeline
 {
-    private FFI $ffi;
-    private ?FFI\CData $handle;
+    private PhpFfi $ffi;
+    private ?PhpFfi\CData $handle;
     private bool $closed = false;
 
     public function __construct(PipelineConfig $config)
@@ -42,7 +42,9 @@ final class Pipeline
         // anchored on the PHP-side for the duration of the invocation.
         $ptr = $this->ffi->c12n_pipeline_new($configJson);
 
-        if (FFI::isNull($ptr)) {
+        // PHP FFI returns plain null for `void*` returns that are NULL —
+        // not an `FFI\CData` wrapping a null pointer. Guard for both.
+        if ($ptr === null || PhpFfi::isNull($ptr)) {
             throw new PipelineException(
                 'c12n: c12n_pipeline_new returned null (invalid config JSON or runtime init failure)',
             );
@@ -63,11 +65,11 @@ final class Pipeline
             throw new PipelineException('c12n: pipeline is closed');
         }
 
-        $contextJson = json_encode($ctx->toArray(), JSON_THROW_ON_ERROR);
+        $contextJson = $ctx->toFfiJson();
 
         $resultPtr = $this->ffi->c12n_pipeline_evaluate($this->handle, $contextJson);
 
-        if (FFI::isNull($resultPtr)) {
+        if ($resultPtr === null || PhpFfi::isNull($resultPtr)) {
             throw new PipelineException(
                 'c12n: c12n_pipeline_evaluate returned null',
             );
@@ -76,7 +78,7 @@ final class Pipeline
         try {
             // Copy the C string into PHP memory before freeing the
             // FFI-owned buffer. FFI::string clones into the PHP heap.
-            $json = FFI::string($resultPtr);
+            $json = PhpFfi::string($resultPtr);
         } finally {
             $this->ffi->c12n_result_free($resultPtr);
         }
