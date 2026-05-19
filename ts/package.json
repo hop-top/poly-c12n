@@ -19,11 +19,14 @@
     }
   },
   "scripts": {
-    "build:wasm:bundler": "wasm-pack build ../c12n-core --target bundler --features wasm --no-default-features --out-dir ../c12n-ts/pkg/bundler",
-    "build:wasm:nodejs": "wasm-pack build ../c12n-core --target nodejs --features wasm --no-default-features --out-dir ../c12n-ts/pkg/nodejs",
+    "build:wasm:bundler": "wasm-pack build ../core --target bundler --out-dir ../ts/pkg/bundler -- --features wasm --no-default-features",
+    "build:wasm:nodejs": "wasm-pack build ../core --target nodejs --out-dir ../ts/pkg/nodejs -- --features wasm --no-default-features",
+    "build:wasm:test": "wasm-pack build ../core --target nodejs --out-dir ../ts/pkg/nodejs -- --features wasm --no-default-features",
     "build:ts": "tsc --build",
     "build": "pnpm build:wasm:bundler && pnpm build:wasm:nodejs && pnpm build:ts",
     "test": "vitest run",
+    "test:unit": "vitest run test/pipeline.test.ts",
+    "test:integration": "pnpm build:wasm:test && vitest run test/pipeline.integration.test.ts",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix"
   },
