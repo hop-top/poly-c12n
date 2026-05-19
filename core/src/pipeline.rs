@@ -4,7 +4,25 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
-use tokio::time::Instant;
+
+// `Instant` source — see ADR-0001 (Implementation Notes: time-on-wasm).
+// Native targets keep `std::time::Instant` (zero-cost, same as before).
+// On `wasm32-unknown-unknown`, `std::time::Instant::now()` is stubbed to
+// `unreachable!()`, so the `wasm` feature substitutes `instant::Instant`,
+// which is backed by `performance.now()` via wasm-bindgen.
+//
+// NOTE: This fix only addresses the explicit `Instant::now()` call below.
+// Tokio's `time::timeout` / `time::sleep` machinery still relies on
+// `std::time::Instant` in its driver; the single-threaded `current_thread`
+// runtime built in `wasm.rs` happens to schedule signals without invoking
+// that path for our short-lived classification workload. The option-B
+// follow-up (refactor signal scheduler around `wasm-bindgen-futures`
+// timeouts and drop tokio's `time` feature on wasm32) tracks the
+// idiomatic fix; see ADR-0001.
+#[cfg(not(feature = "wasm"))]
+use std::time::Instant;
+#[cfg(feature = "wasm")]
+use instant::Instant;
 
 use crate::signal::Signal;
 use crate::types::{ClassificationContext, SignalError, SignalResult};

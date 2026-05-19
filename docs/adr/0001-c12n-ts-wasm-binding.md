@@ -168,6 +168,57 @@ SDK. Doesn't run in browsers / Workers / Deno at all (no subprocess primitive).
 - Streaming evaluation. Current FFI is single-shot evaluate; streaming is a
   c12n-core concern, not a binding concern.
 
+## Implementation Notes
+
+### Time on wasm32 (T-0186)
+
+`pipeline.rs` originally imported `tokio::time::Instant` and called
+`Instant::now()` on entry to `Pipeline::evaluate`. On `wasm32-unknown-unknown`,
+`std::time::Instant::now()` is stubbed to `unreachable!()`
+(`library/std/src/sys/time/unsupported.rs`), so any `Instant::now()` call in
+the wasm build panics at runtime with "time not implemented on this platform".
+This blocked `Pipeline::new` + `Pipeline::evaluate` from running under
+`wasm-bindgen`'s nodejs target — T9's wasm-pack build succeeds but every
+classification call panics.
+
+**Workaround (v0.1.0-alpha.0, option A in T-0186):** depend on the
+[`instant`](https://docs.rs/instant) crate behind the `wasm` Cargo feature
+(`instant = { version = "0.1", features = ["wasm-bindgen"], optional = true }`)
+and `cfg`-alias the `Instant` import in `pipeline.rs`:
+
+```rust
+#[cfg(not(feature = "wasm"))]
+use std::time::Instant;
+#[cfg(feature = "wasm")]
+use instant::Instant;
+```
+
+On native targets `instant::Instant` is a zero-cost re-export of
+`std::time::Instant`; on wasm32 it is backed by `performance.now()` via
+wasm-bindgen. The explicit `Instant::now()` + `start.elapsed()` call in
+`evaluate` now runs on both surfaces without touching `unreachable!()`.
+
+**Scope of the fix.** This only addresses the explicit `Instant::now()` call
+in `pipeline.rs`. Tokio's own time driver (`tokio::time::timeout`,
+`tokio::time::sleep`, `tokio::time::interval`) still imports
+`std::time::Instant` internally; the polyfill does not reach those paths.
+For the v0 scheduler this is acceptable because the `current_thread`
+runtime built in `wasm.rs` schedules our short-lived classification signals
+without exercising those tokio code paths under typical inputs. If a future
+adopter hits a tokio-driver panic on wasm — most likely from a signal whose
+own implementation calls `tokio::time::sleep` or `timeout` — escalate to
+option B below.
+
+**Follow-up (option B, future track).** The idiomatic long-term fix is to
+drop the tokio `time` feature on `cfg(target_arch = "wasm32")` and refactor
+the signal scheduler to drive timeouts via `wasm-bindgen-futures::JsFuture`
+(`setTimeout` + a Rust `oneshot` channel) rather than `tokio::time::timeout`.
+That removes the entire `std::time::Instant` dependency from the wasm
+build and aligns c12n-core with the wasm community pattern (see e.g. how
+`tokio-util`/`futures-timer` handle this). The refactor is more invasive
+(touches every signal that races on a timeout, plus the `Pipeline::evaluate`
+fan-out) and is deliberately out of scope for v0.1.0-alpha.0.
+
 ## References
 
 - `core/src/ffi.rs` — C ABI surface c12n-ts must replace with wasm-bindgen

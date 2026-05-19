@@ -20,10 +20,18 @@ default = []
 # Swaps the multi-threaded tokio runtime for a single-threaded executor
 # and exposes a `wasm` module with `#[wasm_bindgen]` types parallel to
 # the cgo/PyO3 surface in `ffi.rs`. See ADR-0001.
+#
+# The `instant` crate provides a `performance.now()`-backed `Instant` on
+# wasm32 so `pipeline.rs`'s explicit `Instant::now()` call no longer hits
+# `std::time::Instant`'s `unreachable!()` stub on `wasm32-unknown-unknown`.
+# See ADR-0001 (Implementation Notes) for the time-on-wasm gotcha and the
+# option-B follow-up (drop tokio `time` feature on wasm32 + refactor the
+# signal scheduler around `wasm-bindgen-futures::JsFuture` timeouts).
 wasm = [
     "dep:wasm-bindgen",
     "dep:serde-wasm-bindgen",
     "dep:console_error_panic_hook",
+    "dep:instant",
 ]
 
 [dependencies]
@@ -40,6 +48,12 @@ tokio = { version = "1", features = ["sync", "rt", "time", "macros"] }
 wasm-bindgen = { version = "0.2", optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
+# `Instant` polyfill: re-exports `std::time::Instant` on native targets, and
+# on `wasm32-unknown-unknown` swaps in a `performance.now()`-backed impl via
+# wasm-bindgen so `pipeline.rs`'s `Instant::now()` no longer panics with
+# "time not implemented on this platform". Gated behind the `wasm` feature
+# (only pulled in for wasm builds; native FFI consumers keep `std::time`).
+instant = { version = "0.1", features = ["wasm-bindgen"], optional = true }
 
 # Non-wasm builds (host targets: cgo + PyO3 surfaces) layer on the
 # multi-threaded runtime that `ffi.rs` calls `tokio::runtime::Runtime::new()`
