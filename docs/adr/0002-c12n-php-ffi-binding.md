@@ -59,8 +59,13 @@ Seven linked decisions, all locked 2026-05-18 in `plan.md` and ratified here:
 5. **Versioning: linked-versions** with `c12n`, `c12n-core`, `c12n-py`, and
    `c12n-ts`. All bump together; `release-please-config.json`'s
    `linked-versions` group includes c12n-php.
-6. **PHP version floor: 8.1** — composer constraint `"php": "^8.1"`. FFI is
-   stable from 8.1+; experimental below.
+6. **PHP version floor: 8.3 in v0.1.0-alpha.0** — composer constraint
+   `"php": "^8.3"`. The original decision was 8.1+ (FFI stable from 8.1),
+   but kit-php's own `composer.json` pins `^8.3`, and c12n-php's
+   `hop-top/kit: ^0.4` dependency drags that constraint in transitively.
+   Relaxing c12n-php to `^8.1` is impossible without forking kit-php. Floor
+   to revisit (and ideally relax back toward 8.1) once kit-php broadens its
+   own version range. Tracked in T-0185.
 7. **Kit-php dependency: required** — c12n-php depends on `hop-top/kit`
    (Composer) for logging, event-bus participation, and CLI surface. Mirrors
    c12n-py and c12n-ts kit adoption.
@@ -164,14 +169,38 @@ together on every release, so `c12n@0.2.0` always pairs with `c12n-php@0.2.0`,
 `c12n-py@0.2.0`, etc. Operational cost: one mass bump per release; benefit:
 trivial compatibility story ("same version, guaranteed to interoperate").
 
-### 6. PHP 8.1 floor — FFI stability
+### 6. PHP 8.3 floor — FFI stability + kit-php transitive constraint
 
 PHP FFI shipped in 7.4 flagged `experimental` and stayed that way through 8.0.
 Stable from 8.1 onward. Shipping a binding atop upstream-experimental tech is
 a red flag (forward-compat breaks at PHP minor releases; unclear long-term
 support). PHP 7.4 reached EOL in November 2022; PHP 8.0 in November 2023.
-PHP 8.1 has been stable for >3 years at v0 release time. The version floor is
-the minimum that gets us off experimental APIs.
+
+The original ADR decision pinned the floor at **8.1** — the minimum that gets
+us off experimental FFI APIs. However, the c12n-php binding takes a
+`hop-top/kit: ^0.4` dependency for fleet observability (decision §7 below),
+and kit-php's own `composer.json` requires `"php": "^8.3"`. Composer's
+platform-req resolver enforces this transitively, so a c12n-php constraint
+of `"php": "^8.1"` would fail `composer install` on PHP 8.1 and 8.2.
+
+#### Why 8.3, not 8.1
+
+Two options were considered when this surfaced in T-0185:
+
+- **Option A (chosen): align c12n-php with kit-php's `^8.3`.** Update
+  `composer.json` to `"php": "^8.3"` and the CI matrix to current PHP
+  stable versions (8.3, 8.4). One-line composer change; CI matrix stays
+  multi-version to catch PHP-minor-specific FFI breakage.
+- **Option B (rejected): relax composer.json back to `^8.1` and avoid
+  kit-php's transitive constraint.** Would require either forking kit-php
+  to relax its floor, or dropping the kit-php dependency entirely. Forking
+  contradicts the fleet's "one tool per language" convention; dropping
+  kit-php loses fleet observability (decision §7). Cost greatly exceeds
+  the marginal user-base gain from supporting PHP 8.1 / 8.2.
+
+The locked floor in v0.1.0-alpha.0 is therefore **8.3+**. Revisit once
+kit-php broadens its own range — if kit-php ever ships a `^8.1`-compatible
+release, c12n-php can follow.
 
 ### 7. Kit-php dependency — observability for free
 
@@ -261,9 +290,11 @@ on the same cdylib. Deferred to T-0153 once we have adoption signal.
   un-tested via PHP at v0. Mitigated by Rust + Go cgo Windows jobs
   exercising the same cdylib. Residual risk: PHP FFI / Windows linker
   interaction-specific bugs. Tracked in T-0153.
-- **PHP 8.1 floor excludes older PHP** — users on PHP 7.4 / 8.0 cannot
-  install c12n-php. Acceptable: those versions are EOL, and the FFI
-  surface was upstream-experimental.
+- **PHP 8.3 floor excludes older PHP** — users on PHP 7.4 / 8.0 / 8.1 / 8.2
+  cannot install c12n-php at v0.1.0-alpha.0. 7.4 / 8.0 are EOL and had
+  experimental FFI; 8.1 / 8.2 are stable but excluded transitively by
+  kit-php's own `^8.3` floor (see decision §6). The floor relaxes when
+  kit-php's range broadens.
 
 ### Neutral
 
@@ -302,7 +333,7 @@ exists in Rust for API completeness but PHP reads the `char*` directly via
 
 ```text
 php/
-├── composer.json              # name: hop-top/c12n-php; require: php ^8.1, hop-top/kit ^0.4
+├── composer.json              # name: hop-top/c12n-php; require: php ^8.3, hop-top/kit ^0.4
 ├── phpunit.xml
 ├── src/
 │   ├── Pipeline.php           # FFI::cdef wrapper, lifecycle
@@ -319,9 +350,12 @@ php/
 
 ### CI matrix (v0)
 
-PHP 8.1 / 8.2 / 8.3 × {`ubuntu-latest`, `macos-latest`}. `windows-latest`
-deferred to T-0153. cdylib artifact downloaded from the Rust job (same
-artifact-upload pattern c12n-go uses).
+PHP 8.3 / 8.4 × {`ubuntu-latest`, `macos-latest`}. `windows-latest` deferred
+to T-0153. cdylib artifact downloaded from the Rust job (same artifact-upload
+pattern c12n-go uses). Matrix originally listed 8.1 / 8.2 / 8.3 (per the
+original 8.1+ floor) but 8.1 and 8.2 entries failed `composer install`
+platform-req checks once `hop-top/kit: ^0.4` (kit-php) entered the
+dependency graph with its `^8.3` requirement — corrected in T-0185.
 
 ## References
 
