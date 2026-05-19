@@ -53,4 +53,31 @@ final class ClassificationContext
 
         return $out;
     }
+
+    /**
+     * JSON encoding suitable for the FFI wire. Empty PHP arrays in map
+     * positions (`headers`, `config`) become `{}` rather than `[]` so
+     * Rust's serde `HashMap` deserialiser accepts them. Go's
+     * `map[string]string` and Python's `dict` both encode empty as `{}`,
+     * so this normalisation keeps the wire shape consistent across the
+     * three bindings.
+     *
+     * Tested by the FFI integration suite; the array-typed
+     * {@see toArray()} keeps the value-object contract intact.
+     */
+    public function toFfiJson(): string
+    {
+        $payload = [
+            'text' => $this->text,
+            'history' => $this->history,
+            'headers' => $this->headers === [] ? new \stdClass() : $this->headers,
+            'config' => $this->config === [] ? new \stdClass() : $this->config,
+        ];
+
+        if ($this->imageUrl !== null) {
+            $payload['image_url'] = $this->imageUrl;
+        }
+
+        return json_encode($payload, JSON_THROW_ON_ERROR);
+    }
 }

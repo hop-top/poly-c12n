@@ -95,11 +95,32 @@ that affects the four symbols above requires updating `Ffi::CDEF`.
 
 ```bash
 composer install
-composer test   # PHPUnit smoke tests (no FFI; safe without cdylib)
+composer test   # PHPUnit smoke tests + FFI integration (auto-skips if cdylib absent)
 ```
 
-End-to-end FFI tests land with T-0142, gated on a built `libc12n_core`
-in `runtime/lib/`.
+### FFI integration suite
+
+`tests/PipelineFfiIntegrationTest.php` exercises the full roundtrip
+against the real `libc12n_core` cdylib. The suite skips automatically
+when the cdylib is not on disk, so `composer test` stays green on
+fresh clones.
+
+To run it end-to-end:
+
+```bash
+# 1. Build the cdylib (one-time per branch / Rust source change):
+cargo build -p hop-top-c12n-core
+
+# 2. Run PHPUnit pointing at the workspace target/ dir. The suite
+#    accepts either a directory (auto-resolves the OS-specific lib
+#    filename) or a direct file path.
+C12N_CORE_LIB_PATH="$(pwd)/../target/debug" vendor/bin/phpunit
+```
+
+If `C12N_CORE_LIB_PATH` is unset, the suite resolves the cdylib at
+`<workspace>/target/debug/libc12n_core.{dylib,so,dll}` relative to
+this package — the same path `cargo build -p hop-top-c12n-core`
+populates from the workspace root.
 
 ## Troubleshooting
 
