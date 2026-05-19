@@ -71,3 +71,4 @@ jobs:
     with:
       homebrew-tap-repo: homebrew-tap
       scoop-bucket-repo: scoop-bucket
+      winget-fork-repo: winget-pkgs
