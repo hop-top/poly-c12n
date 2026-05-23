@@ -136,6 +136,10 @@ pnpm test:integration
 # Run both (integration tests auto-skip if pkg/nodejs/ is absent)
 pnpm test
 
+# Run the bundler-target smoke tests in a real browser
+# (builds the bundler artifact + boots Playwright Chromium under @vitest/browser)
+pnpm test:bundler
+
 # Lint
 pnpm lint
 ```
@@ -147,7 +151,12 @@ pnpm lint
 - `test/pipeline.integration.test.ts` — real-wasm tests covering
   classification roundtrip, error paths, lifecycle logging, and JSON
   shape parity with the Go (`go/integration_test.go`) and Python
-  (`py/tests/test_integration.py`) surfaces.
+  (`py/tests/test_integration.py`) surfaces. Runs under Node against
+  the `--target nodejs` artifact (`pkg/nodejs/`).
+- `test/bundler-smoke.test.ts` — bundler-target smoke tests (T-0187).
+  Runs under `@vitest/browser` + Playwright Chromium against the
+  `--target bundler` artifact (`pkg/bundler/`). Excluded from the
+  default `pnpm test` run; use `pnpm test:bundler` to invoke.
 - `test/setup.ts` — shared `hasWasm()` artifact check + `wasmRuntimeOk()`
   runtime probe. Integration tests gate on the latter so a broken
   wasm runtime (e.g. tokio's `time` panicking on wasm32) skips loudly
@@ -165,6 +174,18 @@ Prereqs for the wasm build:
 rustup target add wasm32-unknown-unknown
 cargo install wasm-pack
 ```
+
+Prereqs for `pnpm test:bundler` (browser-mode smoke tests):
+
+```sh
+# Browser binary used by @vitest/browser via Playwright.
+pnpm exec playwright install chromium
+# Plus the wasm-pack prereqs above (wasm-pack auto-built by the script).
+```
+
+Playwright is most stable on Linux runners; CI gates the bundler test
+step on `ubuntu-latest` only. macOS / Windows skip the bundler test
+step (the nodejs-target integration tests still run on all platforms).
 
 The CI pipeline handles all of this on every release; local builds are
 only needed for development.
