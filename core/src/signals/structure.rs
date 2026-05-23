@@ -26,20 +26,14 @@ pub struct StructureSignal {
 }
 
 impl StructureSignal {
-    pub fn new(
-        name: impl Into<String>,
-        rules: Vec<StructureRule>,
-    ) -> Self {
+    pub fn new(name: impl Into<String>, rules: Vec<StructureRule>) -> Self {
         Self {
             name: name.into(),
             rules,
         }
     }
 
-    fn check_rule(
-        rule: &StructureRule,
-        text: &str,
-    ) -> Result<bool, SignalError> {
+    fn check_rule(rule: &StructureRule, text: &str) -> Result<bool, SignalError> {
         match &rule.predicate {
             StructurePredicate::Exists => {
                 let re = Self::compile(&rule.pattern)?;
@@ -58,8 +52,7 @@ impl StructureSignal {
                 } else {
                     (count as f64 / text.len() as f64) * 100.0
                 };
-                Ok(density.partial_cmp(threshold).unwrap_or(Ordering::Equal)
-                    == *ord)
+                Ok(density.partial_cmp(threshold).unwrap_or(Ordering::Equal) == *ord)
             }
             StructurePredicate::Sequence(patterns) => {
                 let mut search_start = 0;
@@ -78,21 +71,14 @@ impl StructureSignal {
     }
 
     fn compile(pattern: &str) -> Result<Regex, SignalError> {
-        Regex::new(pattern).map_err(|e| {
-            SignalError::Configuration(format!(
-                "invalid regex '{}': {}",
-                pattern, e
-            ))
-        })
+        Regex::new(pattern)
+            .map_err(|e| SignalError::Configuration(format!("invalid regex '{}': {}", pattern, e)))
     }
 }
 
 #[async_trait]
 impl Signal for StructureSignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         if self.rules.is_empty() {
             return Ok(SignalResult {
                 name: self.name.clone(),
@@ -108,29 +94,18 @@ impl Signal for StructureSignal {
 
         for rule in &self.rules {
             let passes = Self::check_rule(rule, &ctx.text)?;
-            rule_results.insert(
-                rule.name.clone(),
-                serde_json::json!(passes),
-            );
+            rule_results.insert(rule.name.clone(), serde_json::json!(passes));
             if passes {
                 matched.push(rule.name.clone());
             }
         }
 
-        let confidence =
-            matched.len() as f64 / self.rules.len() as f64;
+        let confidence = matched.len() as f64 / self.rules.len() as f64;
 
         let mut metadata = HashMap::new();
-        metadata
-            .insert("rule_results".into(), serde_json::json!(rule_results));
-        metadata.insert(
-            "matched_count".into(),
-            serde_json::json!(matched.len()),
-        );
-        metadata.insert(
-            "total_rules".into(),
-            serde_json::json!(self.rules.len()),
-        );
+        metadata.insert("rule_results".into(), serde_json::json!(rule_results));
+        metadata.insert("matched_count".into(), serde_json::json!(matched.len()));
+        metadata.insert("total_rules".into(), serde_json::json!(self.rules.len()));
 
         Ok(SignalResult {
             name: self.name.clone(),
@@ -181,10 +156,7 @@ mod tests {
         assert_eq!(result.labels, vec!["has_url"]);
         assert_eq!(result.confidence, 1.0);
 
-        let result = signal
-            .evaluate(&make_ctx("no links here"))
-            .await
-            .unwrap();
+        let result = signal.evaluate(&make_ctx("no links here")).await.unwrap();
         assert!(result.labels.is_empty());
         assert_eq!(result.confidence, 0.0);
     }
@@ -196,10 +168,7 @@ mod tests {
             vec![StructureRule {
                 name: "many_sentences".into(),
                 pattern: r"\.".into(),
-                predicate: StructurePredicate::Count(
-                    Ordering::Greater,
-                    2,
-                ),
+                predicate: StructurePredicate::Count(Ordering::Greater, 2),
             }],
         );
         let result = signal
@@ -208,10 +177,7 @@ mod tests {
             .unwrap();
         assert_eq!(result.labels, vec!["many_sentences"]);
 
-        let result = signal
-            .evaluate(&make_ctx("One. Two."))
-            .await
-            .unwrap();
+        let result = signal.evaluate(&make_ctx("One. Two.")).await.unwrap();
         assert!(result.labels.is_empty());
     }
 
@@ -222,10 +188,7 @@ mod tests {
             vec![StructureRule {
                 name: "high_digit_density".into(),
                 pattern: r"\d".into(),
-                predicate: StructurePredicate::Density(
-                    Ordering::Greater,
-                    10.0,
-                ),
+                predicate: StructurePredicate::Density(Ordering::Greater, 10.0),
             }],
         );
         // 10 digits in 20 chars = 50%
@@ -243,10 +206,7 @@ mod tests {
             vec![StructureRule {
                 name: "greeting_then_question".into(),
                 pattern: String::new(),
-                predicate: StructurePredicate::Sequence(vec![
-                    r"(?i)hello".into(),
-                    r"\?".into(),
-                ]),
+                predicate: StructurePredicate::Sequence(vec![r"(?i)hello".into(), r"\?".into()]),
             }],
         );
         let result = signal
@@ -286,10 +246,7 @@ mod tests {
         assert_eq!(result.confidence, 1.0);
         assert_eq!(result.labels.len(), 2);
 
-        let result = signal
-            .evaluate(&make_ctx("```code```"))
-            .await
-            .unwrap();
+        let result = signal.evaluate(&make_ctx("```code```")).await.unwrap();
         assert_eq!(result.confidence, 0.5);
         assert_eq!(result.labels, vec!["has_code"]);
     }
@@ -297,10 +254,7 @@ mod tests {
     #[tokio::test]
     async fn empty_rules() {
         let signal = StructureSignal::new("struct", vec![]);
-        let result = signal
-            .evaluate(&make_ctx("anything"))
-            .await
-            .unwrap();
+        let result = signal.evaluate(&make_ctx("anything")).await.unwrap();
         assert_eq!(result.confidence, 0.0);
         assert!(result.labels.is_empty());
     }

@@ -33,14 +33,9 @@ impl EmbeddingSignal {
 
 #[async_trait]
 impl Signal for EmbeddingSignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         if ctx.text.is_empty() {
-            return Err(SignalError::InvalidInput(
-                "empty input text".to_string(),
-            ));
+            return Err(SignalError::InvalidInput("empty input text".to_string()));
         }
 
         let embedding = self
@@ -72,9 +67,7 @@ impl Signal for EmbeddingSignal {
         }
 
         // Soft match: collect top-K rules by score.
-        scored.sort_unstable_by(|a, b| {
-            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-        });
+        scored.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Determine the global top_k limit (max across all rules, capped by count).
         let top_k = self
@@ -127,10 +120,7 @@ mod tests {
             Ok(self.vector.clone())
         }
 
-        async fn embed_batch(
-            &self,
-            texts: &[&str],
-        ) -> Result<Vec<Vec<f32>>, EmbeddingError> {
+        async fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, EmbeddingError> {
             Ok(texts.iter().map(|_| self.vector.clone()).collect())
         }
 
@@ -151,9 +141,8 @@ mod tests {
 
     fn make_bank(proto: Vec<f32>) -> PrototypeBank {
         let dim = proto.len();
-        PrototypeBank::new(vec![proto], vec![1.0], 1.0, 1).unwrap_or_else(|e| {
-            panic!("failed to create bank (dim={dim}): {e}")
-        })
+        PrototypeBank::new(vec![proto], vec![1.0], 1.0, 1)
+            .unwrap_or_else(|e| panic!("failed to create bank (dim={dim}): {e}"))
     }
 
     #[tokio::test]

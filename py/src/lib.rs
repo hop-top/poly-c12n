@@ -57,9 +57,7 @@ impl PyPipeline {
             config,
         };
 
-        let result = self
-            .runtime
-            .block_on(self.pipeline.evaluate(&ctx));
+        let result = self.runtime.block_on(self.pipeline.evaluate(&ctx));
 
         serialize_result(result)
     }

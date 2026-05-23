@@ -7,8 +7,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 use tokio::sync::Mutex;
 
-use c12n_core::types::{ClassificationContext, SignalError, SignalResult, SignalType};
 use c12n_core::signal::Signal;
+use c12n_core::types::{ClassificationContext, SignalError, SignalResult, SignalType};
 use c12n_core::Pipeline;
 
 fn ctx(text: &str) -> ClassificationContext {
@@ -64,10 +64,7 @@ struct InstantSignal;
 
 #[async_trait]
 impl Signal for InstantSignal {
-    async fn evaluate(
-        &self,
-        _ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, _ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         Ok(SignalResult {
             name: "instant".into(),
             signal_type: SignalType::Custom,
@@ -76,8 +73,12 @@ impl Signal for InstantSignal {
             metadata: HashMap::new(),
         })
     }
-    fn name(&self) -> &str { "instant" }
-    fn signal_type(&self) -> SignalType { SignalType::Custom }
+    fn name(&self) -> &str {
+        "instant"
+    }
+    fn signal_type(&self) -> SignalType {
+        SignalType::Custom
+    }
 }
 
 #[tokio::test]
@@ -87,12 +88,12 @@ async fn pipeline_zero_concurrency_does_not_hang() {
         0, // would hang without the clamp
         Duration::from_secs(2),
     );
-    let result = tokio::time::timeout(
-        Duration::from_secs(3),
-        pipeline.evaluate(&ctx("test")),
-    )
-    .await;
-    assert!(result.is_ok(), "pipeline with max_concurrency=0 should not hang");
+    let result =
+        tokio::time::timeout(Duration::from_secs(3), pipeline.evaluate(&ctx("test"))).await;
+    assert!(
+        result.is_ok(),
+        "pipeline with max_concurrency=0 should not hang"
+    );
     let pr = result.unwrap();
     assert_eq!(pr.results.len(), 1);
 }
@@ -133,26 +134,34 @@ use c12n_core::signals::code::CodeContentSignal;
 #[tokio::test]
 async fn code_detects_cpp() {
     let sig = CodeContentSignal::new("test");
-    let r = sig.evaluate(&ctx("Write a C++ function to sort a vector")).await.unwrap();
+    let r = sig
+        .evaluate(&ctx("Write a C++ function to sort a vector"))
+        .await
+        .unwrap();
     assert!(
         r.labels.iter().any(|l| l.to_lowercase().contains("c++")),
-        "should detect C++ but got labels: {:?}", r.labels
+        "should detect C++ but got labels: {:?}",
+        r.labels
     );
 }
 
 #[tokio::test]
 async fn code_detects_csharp() {
     let sig = CodeContentSignal::new("test");
-    let r = sig.evaluate(&ctx("Implement this in C# using LINQ")).await.unwrap();
+    let r = sig
+        .evaluate(&ctx("Implement this in C# using LINQ"))
+        .await
+        .unwrap();
     assert!(
         r.labels.iter().any(|l| l.to_lowercase().contains("c#")),
-        "should detect C# but got labels: {:?}", r.labels
+        "should detect C# but got labels: {:?}",
+        r.labels
     );
 }
 
 // ---- 5. KeywordSignal: user regex used as-is (no \b wrapping) ----
 
-use c12n_core::signals::keyword::{KeywordSignal, KeywordRule, MatchOperator, MatchStrategy};
+use c12n_core::signals::keyword::{KeywordRule, KeywordSignal, MatchOperator, MatchStrategy};
 
 #[tokio::test]
 async fn keyword_regex_no_implicit_word_boundary() {
@@ -168,7 +177,10 @@ async fn keyword_regex_no_implicit_word_boundary() {
         }],
     );
     let r = sig.evaluate(&ctx("hello world")).await.unwrap();
-    assert_eq!(r.confidence, 1.0, "substring match should work without implicit \\b");
+    assert_eq!(
+        r.confidence, 1.0,
+        "substring match should work without implicit \\b"
+    );
 }
 
 #[tokio::test]

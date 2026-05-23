@@ -25,10 +25,7 @@ pub struct LanguageSignal {
 }
 
 impl LanguageSignal {
-    pub fn new(
-        name: impl Into<String>,
-        detector: Arc<dyn LanguageDetector>,
-    ) -> Self {
+    pub fn new(name: impl Into<String>, detector: Arc<dyn LanguageDetector>) -> Self {
         Self {
             name: name.into(),
             detector,
@@ -38,10 +35,7 @@ impl LanguageSignal {
 
 #[async_trait]
 impl Signal for LanguageSignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         let primary = self.detector.detect(&ctx.text);
         let all = self.detector.detect_multiple(&ctx.text);
 
@@ -73,14 +67,8 @@ impl Signal for LanguageSignal {
                 })
             })
             .collect();
-        metadata.insert(
-            "detected_languages".into(),
-            serde_json::json!(detected),
-        );
-        metadata.insert(
-            "language_count".into(),
-            serde_json::json!(all.len()),
-        );
+        metadata.insert("detected_languages".into(), serde_json::json!(detected));
+        metadata.insert("language_count".into(), serde_json::json!(all.len()));
 
         Ok(SignalResult {
             name: self.name.clone(),
@@ -128,10 +116,7 @@ mod tests {
             }
         }
 
-        fn detect_multiple(
-            &self,
-            text: &str,
-        ) -> Vec<DetectedLanguage> {
+        fn detect_multiple(&self, text: &str) -> Vec<DetectedLanguage> {
             let mut results = Vec::new();
             if let Some(primary) = self.detect(text) {
                 results.push(primary);
@@ -159,14 +144,8 @@ mod tests {
 
     #[tokio::test]
     async fn detects_english() {
-        let signal = LanguageSignal::new(
-            "lang",
-            Arc::new(MockDetector),
-        );
-        let result = signal
-            .evaluate(&make_ctx("hello world"))
-            .await
-            .unwrap();
+        let signal = LanguageSignal::new("lang", Arc::new(MockDetector));
+        let result = signal.evaluate(&make_ctx("hello world")).await.unwrap();
         assert_eq!(result.labels, vec!["en"]);
         assert_eq!(result.confidence, 0.95);
         assert_eq!(result.signal_type, SignalType::Language);
@@ -174,10 +153,7 @@ mod tests {
 
     #[tokio::test]
     async fn detects_french() {
-        let signal = LanguageSignal::new(
-            "lang",
-            Arc::new(MockDetector),
-        );
+        let signal = LanguageSignal::new("lang", Arc::new(MockDetector));
         let result = signal
             .evaluate(&make_ctx("bonjour le monde"))
             .await
@@ -188,10 +164,7 @@ mod tests {
 
     #[tokio::test]
     async fn empty_text_no_detection() {
-        let signal = LanguageSignal::new(
-            "lang",
-            Arc::new(MockDetector),
-        );
+        let signal = LanguageSignal::new("lang", Arc::new(MockDetector));
         let result = signal.evaluate(&make_ctx("")).await.unwrap();
         assert!(result.labels.is_empty());
         assert_eq!(result.confidence, 0.0);
@@ -199,39 +172,23 @@ mod tests {
 
     #[tokio::test]
     async fn multiple_languages_in_metadata() {
-        let signal = LanguageSignal::new(
-            "lang",
-            Arc::new(MockDetector),
-        );
-        let result = signal
-            .evaluate(&make_ctx("hello bonjour"))
-            .await
-            .unwrap();
+        let signal = LanguageSignal::new("lang", Arc::new(MockDetector));
+        let result = signal.evaluate(&make_ctx("hello bonjour")).await.unwrap();
         // Primary is French (bonjour triggers first)
         assert_eq!(result.labels, vec!["fr"]);
 
-        let langs = result.metadata["detected_languages"]
-            .as_array()
-            .unwrap();
+        let langs = result.metadata["detected_languages"].as_array().unwrap();
         assert_eq!(langs.len(), 2);
 
-        let count =
-            result.metadata["language_count"].as_u64().unwrap();
+        let count = result.metadata["language_count"].as_u64().unwrap();
         assert_eq!(count, 2);
     }
 
     #[tokio::test]
     async fn metadata_includes_primary() {
-        let signal = LanguageSignal::new(
-            "lang",
-            Arc::new(MockDetector),
-        );
-        let result = signal
-            .evaluate(&make_ctx("hello"))
-            .await
-            .unwrap();
-        let primary =
-            result.metadata["primary_language"].as_object().unwrap();
+        let signal = LanguageSignal::new("lang", Arc::new(MockDetector));
+        let result = signal.evaluate(&make_ctx("hello")).await.unwrap();
+        let primary = result.metadata["primary_language"].as_object().unwrap();
         assert_eq!(primary["code"].as_str().unwrap(), "en");
         assert_eq!(primary["name"].as_str().unwrap(), "English");
     }

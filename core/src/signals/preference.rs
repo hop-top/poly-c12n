@@ -9,11 +9,7 @@ use crate::types::{ClassificationContext, SignalError, SignalResult, SignalType}
 
 #[async_trait]
 pub trait PreferenceLlm: Send + Sync {
-    async fn query(
-        &self,
-        prompt: &str,
-        system: &str,
-    ) -> Result<String, SignalError>;
+    async fn query(&self, prompt: &str, system: &str) -> Result<String, SignalError>;
 }
 
 pub struct PreferenceSignal {
@@ -70,24 +66,16 @@ impl PreferenceSignal {
 
 #[async_trait]
 impl Signal for PreferenceSignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
-        let response = tokio::time::timeout(
-            self.timeout,
-            self.llm.query(&ctx.text, &self.system_prompt),
-        )
-        .await
-        .map_err(|_| SignalError::Timeout)??;
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
+        let response =
+            tokio::time::timeout(self.timeout, self.llm.query(&ctx.text, &self.system_prompt))
+                .await
+                .map_err(|_| SignalError::Timeout)??;
 
         let (label, confidence) = self.find_label(&response);
 
         let mut metadata = HashMap::new();
-        metadata.insert(
-            "raw_response".into(),
-            serde_json::Value::from(response),
-        );
+        metadata.insert("raw_response".into(), serde_json::Value::from(response));
 
         Ok(SignalResult {
             name: self.name.clone(),
@@ -117,11 +105,7 @@ mod tests {
 
     #[async_trait]
     impl PreferenceLlm for MockLlm {
-        async fn query(
-            &self,
-            _prompt: &str,
-            _system: &str,
-        ) -> Result<String, SignalError> {
+        async fn query(&self, _prompt: &str, _system: &str) -> Result<String, SignalError> {
             match &self.response {
                 Ok(s) => Ok(s.clone()),
                 Err(_) => Err(SignalError::Inference("mock error".into())),
@@ -140,11 +124,7 @@ mod tests {
     }
 
     fn labels() -> Vec<String> {
-        vec![
-            "model-a".into(),
-            "model-b".into(),
-            "model-c".into(),
-        ]
+        vec!["model-a".into(), "model-b".into(), "model-c".into()]
     }
 
     #[tokio::test]
@@ -152,13 +132,8 @@ mod tests {
         let llm = Arc::new(MockLlm {
             response: Ok("I prefer model-b for this task".into()),
         });
-        let signal = PreferenceSignal::new(
-            "pref",
-            llm,
-            "pick one",
-            Duration::from_secs(5),
-            labels(),
-        );
+        let signal =
+            PreferenceSignal::new("pref", llm, "pick one", Duration::from_secs(5), labels());
 
         let result = signal.evaluate(&ctx("test")).await.unwrap();
         assert_eq!(result.labels, vec!["model-b"]);
@@ -170,13 +145,8 @@ mod tests {
         let llm = Arc::new(MockLlm {
             response: Ok("model-a and model-b are both good".into()),
         });
-        let signal = PreferenceSignal::new(
-            "pref",
-            llm,
-            "pick one",
-            Duration::from_secs(5),
-            labels(),
-        );
+        let signal =
+            PreferenceSignal::new("pref", llm, "pick one", Duration::from_secs(5), labels());
 
         let result = signal.evaluate(&ctx("test")).await.unwrap();
         assert!((result.confidence - 0.5).abs() < 1e-6);
@@ -187,13 +157,8 @@ mod tests {
         let llm = Arc::new(MockLlm {
             response: Ok("none of the above".into()),
         });
-        let signal = PreferenceSignal::new(
-            "pref",
-            llm,
-            "pick one",
-            Duration::from_secs(5),
-            labels(),
-        );
+        let signal =
+            PreferenceSignal::new("pref", llm, "pick one", Duration::from_secs(5), labels());
 
         let result = signal.evaluate(&ctx("test")).await.unwrap();
         assert_eq!(result.labels, vec!["model-a"]);
@@ -206,11 +171,7 @@ mod tests {
 
         #[async_trait]
         impl PreferenceLlm for SlowLlm {
-            async fn query(
-                &self,
-                _prompt: &str,
-                _system: &str,
-            ) -> Result<String, SignalError> {
+            async fn query(&self, _prompt: &str, _system: &str) -> Result<String, SignalError> {
                 tokio::time::sleep(Duration::from_secs(10)).await;
                 Ok("model-a".into())
             }
@@ -233,13 +194,8 @@ mod tests {
         let llm = Arc::new(MockLlm {
             response: Err(SignalError::Inference("fail".into())),
         });
-        let signal = PreferenceSignal::new(
-            "pref",
-            llm,
-            "pick one",
-            Duration::from_secs(5),
-            labels(),
-        );
+        let signal =
+            PreferenceSignal::new("pref", llm, "pick one", Duration::from_secs(5), labels());
 
         let result = signal.evaluate(&ctx("test")).await;
         assert!(result.is_err());
@@ -250,13 +206,7 @@ mod tests {
         let llm = Arc::new(MockLlm {
             response: Ok("ok".into()),
         });
-        let signal = PreferenceSignal::new(
-            "pref",
-            llm,
-            "sys",
-            Duration::from_secs(5),
-            labels(),
-        );
+        let signal = PreferenceSignal::new("pref", llm, "sys", Duration::from_secs(5), labels());
 
         assert_eq!(signal.signal_type(), SignalType::Preference);
         assert_eq!(signal.name(), "pref");

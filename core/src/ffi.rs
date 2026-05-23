@@ -90,7 +90,9 @@ unsafe fn cstr_to_str<'a>(ptr: *const c_char) -> Option<&'a str> {
 /// `c12n_result_free`.
 fn to_c_json<T: Serialize>(val: &T) -> *mut c_char {
     match serde_json::to_string(val) {
-        Ok(s) => CString::new(s).map(CString::into_raw).unwrap_or(ptr::null_mut()),
+        Ok(s) => CString::new(s)
+            .map(CString::into_raw)
+            .unwrap_or(ptr::null_mut()),
         Err(_) => ptr::null_mut(),
     }
 }

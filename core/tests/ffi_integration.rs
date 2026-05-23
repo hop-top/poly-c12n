@@ -2,8 +2,7 @@ use std::ffi::{c_char, c_void, CStr, CString};
 use std::ptr;
 
 use c12n_core::ffi::{
-    c12n_pipeline_evaluate, c12n_pipeline_free, c12n_pipeline_new,
-    c12n_result_free,
+    c12n_pipeline_evaluate, c12n_pipeline_free, c12n_pipeline_new, c12n_result_free,
 };
 
 fn c(s: &str) -> CString {
@@ -26,8 +25,7 @@ fn roundtrip_create_evaluate_free() {
 
     // Parse the JSON result
     let json_str = unsafe { CStr::from_ptr(res) }.to_str().unwrap();
-    let val: serde_json::Value =
-        serde_json::from_str(json_str).expect("result must be valid JSON");
+    let val: serde_json::Value = serde_json::from_str(json_str).expect("result must be valid JSON");
 
     assert!(val["results"].is_array(), "results must be array");
     assert!(val["errors"].is_array(), "errors must be array");
@@ -44,10 +42,7 @@ fn roundtrip_create_evaluate_free() {
 #[test]
 fn null_pipeline_pointer_returns_error_json() {
     let ctx = c(r#"{"text":"x","history":[],"headers":{},"config":{}}"#);
-    let res = c12n_pipeline_evaluate(
-        ptr::null() as *const c_void,
-        ctx.as_ptr(),
-    );
+    let res = c12n_pipeline_evaluate(ptr::null() as *const c_void, ctx.as_ptr());
     assert!(!res.is_null(), "should return error JSON, not null");
 
     let json_str = unsafe { CStr::from_ptr(res) }.to_str().unwrap();
@@ -108,8 +103,7 @@ fn invalid_context_json_returns_error() {
     assert!(!res.is_null(), "should return error JSON");
 
     let json_str = unsafe { CStr::from_ptr(res) }.to_str().unwrap();
-    let val: serde_json::Value =
-        serde_json::from_str(json_str).expect("error must be valid JSON");
+    let val: serde_json::Value = serde_json::from_str(json_str).expect("error must be valid JSON");
     assert!(
         val["error"].is_string(),
         "error envelope should have 'error' field",

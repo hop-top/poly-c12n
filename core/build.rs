@@ -9,18 +9,16 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    let crate_dir = env::var("CARGO_MANIFEST_DIR")
-        .expect("CARGO_MANIFEST_DIR must be set by cargo");
+    let crate_dir =
+        env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set by cargo");
     let crate_dir = PathBuf::from(crate_dir);
 
     let include_dir = crate_dir.join("include");
-    std::fs::create_dir_all(&include_dir)
-        .expect("failed to create include/ directory");
+    std::fs::create_dir_all(&include_dir).expect("failed to create include/ directory");
     let out_path = include_dir.join("libc12n_core.h");
 
     let config_path = crate_dir.join("cbindgen.toml");
-    let config = cbindgen::Config::from_file(&config_path)
-        .expect("failed to load cbindgen.toml");
+    let config = cbindgen::Config::from_file(&config_path).expect("failed to load cbindgen.toml");
 
     // Re-run only when FFI surface or config changes.
     println!("cargo:rerun-if-changed=src/ffi.rs");

@@ -20,10 +20,26 @@ pub struct ToolCallingSignal {
 impl ToolCallingSignal {
     pub fn new(name: impl Into<String>) -> Self {
         let verbs = &[
-            "search", "lookup", "look up", "find", "calculate",
-            "fetch", "send", "create", "delete", "update", "get",
-            "check", "book", "order", "schedule", "download",
-            "upload", "query", "list", "subscribe",
+            "search",
+            "lookup",
+            "look up",
+            "find",
+            "calculate",
+            "fetch",
+            "send",
+            "create",
+            "delete",
+            "update",
+            "get",
+            "check",
+            "book",
+            "order",
+            "schedule",
+            "download",
+            "upload",
+            "query",
+            "list",
+            "subscribe",
         ];
 
         let action_verbs: Vec<(Regex, String)> = verbs
@@ -64,10 +80,7 @@ impl ToolCallingSignal {
 
 #[async_trait]
 impl Signal for ToolCallingSignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         let text = &ctx.text;
         let mut labels = Vec::new();
         let mut signals = 0u32;
@@ -117,7 +130,11 @@ impl Signal for ToolCallingSignal {
                 _ => 0.9,
             };
             // Realworld bumps confidence
-            if has_realworld { base.max(0.8) } else { base }
+            if has_realworld {
+                base.max(0.8)
+            } else {
+                base
+            }
         };
 
         // Top-level label
@@ -214,9 +231,7 @@ mod tests {
     async fn multiple_signals_high_confidence() {
         let s = ToolCallingSignal::new("tool");
         let r = s
-            .evaluate(&ctx(
-                "Check the current stock price of AAPL",
-            ))
+            .evaluate(&ctx("Check the current stock price of AAPL"))
             .await
             .unwrap();
         // "check" verb + "current" temporal + "stock price" realworld
@@ -237,10 +252,7 @@ mod tests {
     #[tokio::test]
     async fn send_email_realworld() {
         let s = ToolCallingSignal::new("tool");
-        let r = s
-            .evaluate(&ctx("Send an email to Bob"))
-            .await
-            .unwrap();
+        let r = s.evaluate(&ctx("Send an email to Bob")).await.unwrap();
         assert!(r.confidence >= 0.8);
         assert!(r.labels.contains(&"realworld_state".to_string()));
     }

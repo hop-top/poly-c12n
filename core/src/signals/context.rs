@@ -52,22 +52,16 @@ impl ContextSignal {
 
 #[async_trait]
 impl Signal for ContextSignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         let input_tokens = self.tokenizer.count_tokens(&ctx.text);
-        let estimated_output =
-            (input_tokens as f64 * self.output_ratio).ceil() as usize;
+        let estimated_output = (input_tokens as f64 * self.output_ratio).ceil() as usize;
 
         let label = Self::token_label(input_tokens);
 
         let mut costs = HashMap::new();
         for p in &self.pricing {
-            let input_cost =
-                (input_tokens as f64 / 1000.0) * p.input_cost_per_1k;
-            let output_cost =
-                (estimated_output as f64 / 1000.0) * p.output_cost_per_1k;
+            let input_cost = (input_tokens as f64 / 1000.0) * p.input_cost_per_1k;
+            let output_cost = (estimated_output as f64 / 1000.0) * p.output_cost_per_1k;
             costs.insert(
                 p.model.clone(),
                 serde_json::json!({
@@ -79,10 +73,7 @@ impl Signal for ContextSignal {
         }
 
         let mut metadata = HashMap::new();
-        metadata.insert(
-            "input_tokens".into(),
-            serde_json::json!(input_tokens),
-        );
+        metadata.insert("input_tokens".into(), serde_json::json!(input_tokens));
         metadata.insert(
             "estimated_output_tokens".into(),
             serde_json::json!(estimated_output),
@@ -140,12 +131,7 @@ mod tests {
 
     #[tokio::test]
     async fn short_text_label() {
-        let signal = ContextSignal::new(
-            "ctx",
-            Arc::new(MockTokenizer),
-            0.5,
-            vec![],
-        );
+        let signal = ContextSignal::new("ctx", Arc::new(MockTokenizer), 0.5, vec![]);
         let result = signal.evaluate(&make_ctx("hello")).await.unwrap();
         assert_eq!(result.labels, vec!["short"]);
         assert_eq!(result.signal_type, SignalType::Context);
@@ -155,12 +141,7 @@ mod tests {
     #[tokio::test]
     async fn medium_text_label() {
         let text = "a".repeat(500);
-        let signal = ContextSignal::new(
-            "ctx",
-            Arc::new(MockTokenizer),
-            0.5,
-            vec![],
-        );
+        let signal = ContextSignal::new("ctx", Arc::new(MockTokenizer), 0.5, vec![]);
         let result = signal.evaluate(&make_ctx(&text)).await.unwrap();
         assert_eq!(result.labels, vec!["medium"]);
     }
@@ -168,12 +149,7 @@ mod tests {
     #[tokio::test]
     async fn long_text_label() {
         let text = "a".repeat(8000);
-        let signal = ContextSignal::new(
-            "ctx",
-            Arc::new(MockTokenizer),
-            0.5,
-            vec![],
-        );
+        let signal = ContextSignal::new("ctx", Arc::new(MockTokenizer), 0.5, vec![]);
         let result = signal.evaluate(&make_ctx(&text)).await.unwrap();
         assert_eq!(result.labels, vec!["long"]);
     }
@@ -181,12 +157,7 @@ mod tests {
     #[tokio::test]
     async fn very_long_text_label() {
         let text = "a".repeat(40000);
-        let signal = ContextSignal::new(
-            "ctx",
-            Arc::new(MockTokenizer),
-            0.5,
-            vec![],
-        );
+        let signal = ContextSignal::new("ctx", Arc::new(MockTokenizer), 0.5, vec![]);
         let result = signal.evaluate(&make_ctx(&text)).await.unwrap();
         assert_eq!(result.labels, vec!["very_long"]);
     }
@@ -198,21 +169,14 @@ mod tests {
             input_cost_per_1k: 0.03,
             output_cost_per_1k: 0.06,
         }];
-        let signal = ContextSignal::new(
-            "ctx",
-            Arc::new(MockTokenizer),
-            1.0,
-            pricing,
-        );
+        let signal = ContextSignal::new("ctx", Arc::new(MockTokenizer), 1.0, pricing);
         let text = "a".repeat(4000);
         let result = signal.evaluate(&make_ctx(&text)).await.unwrap();
 
-        let input_tokens =
-            result.metadata["input_tokens"].as_u64().unwrap();
+        let input_tokens = result.metadata["input_tokens"].as_u64().unwrap();
         assert_eq!(input_tokens, 1000);
 
-        let est_output =
-            result.metadata["estimated_output_tokens"].as_u64().unwrap();
+        let est_output = result.metadata["estimated_output_tokens"].as_u64().unwrap();
         assert_eq!(est_output, 1000);
 
         let costs = result.metadata["costs"].as_object().unwrap();

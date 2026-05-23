@@ -48,10 +48,7 @@ impl FeedbackSignal {
 
 #[async_trait]
 impl Signal for FeedbackSignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         let satisfaction_score = self.detector.score(&ctx.text).await?;
 
         let mut reask_similarity: f64 = 0.0;
@@ -69,9 +66,7 @@ impl Signal for FeedbackSignal {
             is_reask = reask_similarity > self.reask_threshold;
         }
 
-        let mut labels = vec![
-            Self::satisfaction_label(satisfaction_score).to_string(),
-        ];
+        let mut labels = vec![Self::satisfaction_label(satisfaction_score).to_string()];
         if is_reask {
             labels.push("reask".to_string());
         }
@@ -140,10 +135,7 @@ mod tests {
             Ok(self.vector.clone())
         }
 
-        async fn embed_batch(
-            &self,
-            texts: &[&str],
-        ) -> Result<Vec<Vec<f32>>, EmbeddingError> {
+        async fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, EmbeddingError> {
             if self.varied {
                 // First text gets [1,0,0,0], second gets [0,1,0,0]
                 Ok(texts
