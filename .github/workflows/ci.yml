@@ -164,7 +164,6 @@ jobs:
 
   ts-bindings:
     name: TS bindings (${{ matrix.os }})
-    if: hashFiles('ts/package.json') != ''
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -220,7 +219,6 @@ jobs:
 
   php-bindings:
     name: PHP bindings (PHP ${{ matrix.php }}, ${{ matrix.os }})
-    if: hashFiles('php/composer.json') != ''
     needs: rust
     runs-on: ${{ matrix.os }}
     strategy:
