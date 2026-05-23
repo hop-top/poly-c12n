@@ -87,7 +87,14 @@ jobs:
 
   go-cgo:
     name: Go (cgo, ${{ matrix.os }})
+    # `needs: rust` waits for the rust matrix as a whole; with
+    # `fail-fast: false` upstream, a single OS slice failure must not
+    # cancel this job's other OS slices. `if: always() && ...` lets each
+    # matrix slice here run on its own — it fails fast at the
+    # download-artifact step if its own OS's libc12n_core artifact is
+    # missing (because that OS's rust slice didn't succeed).
     needs: rust
+    if: always() && needs.rust.result != 'cancelled'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -217,7 +224,10 @@ jobs:
 
   php-bindings:
     name: PHP bindings (PHP ${{ matrix.php }}, ${{ matrix.os }})
+    # See go-cgo above re: per-OS gating via `if: always()` + artifact
+    # download as the real gate.
     needs: rust
+    if: always() && needs.rust.result != 'cancelled'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
