@@ -87,7 +87,14 @@ jobs:
 
   go-cgo:
     name: Go (cgo, ${{ matrix.os }})
+    # `needs: rust` waits for the rust matrix as a whole; with
+    # `fail-fast: false` upstream, a single OS slice failure must not
+    # cancel this job's other OS slices. `if: always() && ...` lets each
+    # matrix slice here run on its own — it fails fast at the
+    # download-artifact step if its own OS's libc12n_core artifact is
+    # missing (because that OS's rust slice didn't succeed).
     needs: rust
+    if: always() && needs.rust.result != 'cancelled'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -111,7 +118,7 @@ jobs:
           go-version-file: go/go.mod
       - name: Install MinGW (Windows)
         if: runner.os == 'Windows'
-        uses: egor-tensin/setup-mingw@v2
+        uses: egor-tensin/setup-mingw@v3
         with:
           platform: x64
       - uses: actions/download-artifact@v4
@@ -217,15 +224,24 @@ jobs:
 
   php-bindings:
     name: PHP bindings (PHP ${{ matrix.php }}, ${{ matrix.os }})
+    # See go-cgo above re: per-OS gating via `if: always()` + artifact
+    # download as the real gate.
     needs: rust
+    if: always() && needs.rust.result != 'cancelled'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        php: ["8.3", "8.4"]
+        php: ["8.4"]
     permissions:
       contents: read
+    # Hoisted to job-level so the Installer's post-install-cmd hook
+    # (which runs during `composer install`) sees it too — without this,
+    # the Installer attempts to download libc12n_core from a non-existent
+    # GitHub release tag.
+    env:
+      C12N_CORE_LIB_PATH: ${{ github.workspace }}/php/runtime/lib
     steps:
       - uses: actions/checkout@v4
       - name: setup PHP
@@ -244,6 +260,4 @@ jobs:
         run: composer install --no-interaction --prefer-dist
       - name: phpunit
         working-directory: php
-        env:
-          C12N_CORE_LIB_PATH: ${{ github.workspace }}/php/runtime/lib
         run: vendor/bin/phpunit
