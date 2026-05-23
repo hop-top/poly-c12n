@@ -118,7 +118,7 @@ jobs:
           go-version-file: go/go.mod
       - name: Install MinGW (Windows)
         if: runner.os == 'Windows'
-        uses: egor-tensin/setup-mingw@v2
+        uses: egor-tensin/setup-mingw@v3
         with:
           platform: x64
       - uses: actions/download-artifact@v4
