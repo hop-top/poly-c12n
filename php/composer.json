@@ -3,8 +3,10 @@
   "description": "LLM request classification engine — PHP FFI bindings over the Rust core",
   "type": "library",
   "license": "MIT",
+  "minimum-stability": "alpha",
+  "prefer-stable": true,
   "require": {
-    "php": "^8.3",
+    "php": "^8.4",
     "ext-ffi": "*",
     "hop-top/kit": "^0.4"
   },
