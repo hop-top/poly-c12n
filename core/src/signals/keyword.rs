@@ -179,7 +179,7 @@ impl KeywordSignal {
 
         let score = idf * tf_norm;
         // Normalise to 0..1 with a sigmoid-style clamp.
-        Ok(score.max(0.0).min(1.0))
+        Ok(score.clamp(0.0, 1.0))
     }
 
     fn tokenize(text: &str) -> Vec<String> {
@@ -266,9 +266,7 @@ impl KeywordSignal {
                 } else {
                     1
                 };
-                curr[j] = (prev[j] + 1)
-                    .min(curr[j - 1] + 1)
-                    .min(prev[j - 1] + cost);
+                curr[j] = (prev[j] + 1).min(curr[j - 1] + 1).min(prev[j - 1] + cost);
             }
             std::mem::swap(&mut prev, &mut curr);
         }
@@ -290,10 +288,7 @@ impl Signal for KeywordSignal {
         SignalType::Keyword
     }
 
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         for rule in &self.rules {
             let score = self.score_rule(&ctx.text, rule)?;
             if score >= rule.threshold {

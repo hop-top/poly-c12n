@@ -90,7 +90,9 @@ unsafe fn cstr_to_str<'a>(ptr: *const c_char) -> Option<&'a str> {
 /// `c12n_result_free`.
 fn to_c_json<T: Serialize>(val: &T) -> *mut c_char {
     match serde_json::to_string(val) {
-        Ok(s) => CString::new(s).map(CString::into_raw).unwrap_or(ptr::null_mut()),
+        Ok(s) => CString::new(s)
+            .map(CString::into_raw)
+            .unwrap_or(ptr::null_mut()),
         Err(_) => ptr::null_mut(),
     }
 }
@@ -110,8 +112,10 @@ fn error_json(msg: &str) -> *mut c_char {
 ///
 /// `config_json`: JSON string with `max_concurrency` and `timeout_ms`.
 /// Returns null on error.
+/// # Safety
+/// `config_json` must be a valid null-terminated C string pointer, or null.
 #[no_mangle]
-pub extern "C" fn c12n_pipeline_new(config_json: *const c_char) -> *mut c_void {
+pub unsafe extern "C" fn c12n_pipeline_new(config_json: *const c_char) -> *mut c_void {
     let json = match unsafe { cstr_to_str(config_json) } {
         Some(s) => s,
         None => return ptr::null_mut(),
@@ -144,8 +148,11 @@ pub extern "C" fn c12n_pipeline_new(config_json: *const c_char) -> *mut c_void {
 ///
 /// Returns a heap-allocated JSON string. Caller must free with
 /// `c12n_result_free`. Returns a JSON error object on failure.
+/// # Safety
+/// `pipeline` must be a valid pointer returned by `c12n_pipeline_new`, or null.
+/// `context_json` must be a valid null-terminated C string pointer, or null.
 #[no_mangle]
-pub extern "C" fn c12n_pipeline_evaluate(
+pub unsafe extern "C" fn c12n_pipeline_evaluate(
     pipeline: *const c_void,
     context_json: *const c_char,
 ) -> *mut c_char {
@@ -187,8 +194,12 @@ pub extern "C" fn c12n_pipeline_evaluate(
 }
 
 /// Free a pipeline created by `c12n_pipeline_new`.
+///
+/// # Safety
+/// `pipeline` must be a valid pointer returned by `c12n_pipeline_new` (and not
+/// already freed), or null.
 #[no_mangle]
-pub extern "C" fn c12n_pipeline_free(pipeline: *mut c_void) {
+pub unsafe extern "C" fn c12n_pipeline_free(pipeline: *mut c_void) {
     if pipeline.is_null() {
         return;
     }
@@ -198,8 +209,12 @@ pub extern "C" fn c12n_pipeline_free(pipeline: *mut c_void) {
 }
 
 /// Free a result string returned by `c12n_pipeline_evaluate`.
+///
+/// # Safety
+/// `result` must be a pointer returned by `c12n_pipeline_evaluate` (and not
+/// already freed), or null.
 #[no_mangle]
-pub extern "C" fn c12n_result_free(result: *mut c_char) {
+pub unsafe extern "C" fn c12n_result_free(result: *mut c_char) {
     if result.is_null() {
         return;
     }
@@ -225,51 +240,61 @@ mod tests {
     #[test]
     fn roundtrip_create_evaluate_free() {
         let cfg = c(r#"{"max_concurrency":2,"timeout_ms":1000}"#);
-        let p = c12n_pipeline_new(cfg.as_ptr());
-        assert!(!p.is_null());
+        unsafe {
+            let p = c12n_pipeline_new(cfg.as_ptr());
+            assert!(!p.is_null());
 
-        let ctx = c(r#"{"text":"hi","history":[],"headers":{},"config":{}}"#);
-        let res = c12n_pipeline_evaluate(p, ctx.as_ptr());
-        assert!(!res.is_null());
+            let ctx = c(r#"{"text":"hi","history":[],"headers":{},"config":{}}"#);
+            let res = c12n_pipeline_evaluate(p, ctx.as_ptr());
+            assert!(!res.is_null());
 
-        let json_str = unsafe { CStr::from_ptr(res) }.to_str().unwrap();
-        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
-        assert!(val["results"].is_array());
-        assert!(val["errors"].is_array());
-        assert!(val["duration_ms"].is_number());
+            let json_str = CStr::from_ptr(res).to_str().unwrap();
+            let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+            assert!(val["results"].is_array());
+            assert!(val["errors"].is_array());
+            assert!(val["duration_ms"].is_number());
 
-        c12n_result_free(res);
-        c12n_pipeline_free(p);
+            c12n_result_free(res);
+            c12n_pipeline_free(p);
+        }
     }
 
     #[test]
     fn null_pipeline_returns_error() {
         let ctx = c(r#"{"text":"x","history":[],"headers":{},"config":{}}"#);
-        let res = c12n_pipeline_evaluate(ptr::null() as *const c_void, ctx.as_ptr());
-        assert!(!res.is_null());
+        unsafe {
+            let res = c12n_pipeline_evaluate(ptr::null(), ctx.as_ptr());
+            assert!(!res.is_null());
 
-        let json_str = unsafe { CStr::from_ptr(res) }.to_str().unwrap();
-        assert!(json_str.contains("null pipeline pointer"));
+            let json_str = CStr::from_ptr(res).to_str().unwrap();
+            assert!(json_str.contains("null pipeline pointer"));
 
-        c12n_result_free(res);
+            c12n_result_free(res);
+        }
     }
 
     #[test]
     fn null_config_returns_null() {
-        let p = c12n_pipeline_new(ptr::null());
-        assert!(p.is_null());
+        unsafe {
+            let p = c12n_pipeline_new(ptr::null());
+            assert!(p.is_null());
+        }
     }
 
     #[test]
     fn invalid_json_returns_null() {
         let bad = c("not json");
-        let p = c12n_pipeline_new(bad.as_ptr());
-        assert!(p.is_null());
+        unsafe {
+            let p = c12n_pipeline_new(bad.as_ptr());
+            assert!(p.is_null());
+        }
     }
 
     #[test]
     fn free_null_is_noop() {
-        c12n_pipeline_free(ptr::null_mut());
-        c12n_result_free(ptr::null_mut());
+        unsafe {
+            c12n_pipeline_free(ptr::null_mut());
+            c12n_result_free(ptr::null_mut());
+        }
     }
 }

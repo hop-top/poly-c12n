@@ -50,34 +50,61 @@ pub struct OutputFormatSignal {
 impl OutputFormatSignal {
     pub fn new(name: impl Into<String>) -> Self {
         let explicit = vec![
-            (r"(?i)\b(respond|reply|answer|output|format|give|return|provide)\b.{0,20}\bjson\b", OutputFormat::Json),
+            (
+                r"(?i)\b(respond|reply|answer|output|format|give|return|provide)\b.{0,20}\bjson\b",
+                OutputFormat::Json,
+            ),
             (r"(?i)\bas\s+json\b", OutputFormat::Json),
             (r"(?i)\bin\s+json\b", OutputFormat::Json),
-            (r"(?i)\bjson\s+(format|output|response)\b", OutputFormat::Json),
-            (r"(?i)\b(respond|reply|answer|output|format|give|return|provide)\b.{0,20}\bxml\b", OutputFormat::Xml),
+            (
+                r"(?i)\bjson\s+(format|output|response)\b",
+                OutputFormat::Json,
+            ),
+            (
+                r"(?i)\b(respond|reply|answer|output|format|give|return|provide)\b.{0,20}\bxml\b",
+                OutputFormat::Xml,
+            ),
             (r"(?i)\bas\s+xml\b", OutputFormat::Xml),
             (r"(?i)\bin\s+xml\b", OutputFormat::Xml),
-            (r"(?i)\b(respond|reply|answer|output|format|give|return|provide)\b.{0,20}\bmarkdown\b", OutputFormat::Markdown),
+            (
+                r"(?i)\b(respond|reply|answer|output|format|give|return|provide)\b.{0,20}\bmarkdown\b",
+                OutputFormat::Markdown,
+            ),
             (r"(?i)\bas\s+markdown\b", OutputFormat::Markdown),
             (r"(?i)\bin\s+markdown\b", OutputFormat::Markdown),
-            (r"(?i)\b(respond|reply|answer|output|format|give|return|provide)\b.{0,20}\btable\b", OutputFormat::Table),
+            (
+                r"(?i)\b(respond|reply|answer|output|format|give|return|provide)\b.{0,20}\btable\b",
+                OutputFormat::Table,
+            ),
             (r"(?i)\bas\s+a?\s*table\b", OutputFormat::Table),
             (r"(?i)\bformat\s+as\s+table\b", OutputFormat::Table),
             (r"(?i)\btabular\s+format\b", OutputFormat::Table),
-            (r"(?i)\b(respond|reply|answer|output|format|give|return|provide)\b.{0,20}\bcsv\b", OutputFormat::Csv),
+            (
+                r"(?i)\b(respond|reply|answer|output|format|give|return|provide)\b.{0,20}\bcsv\b",
+                OutputFormat::Csv,
+            ),
             (r"(?i)\bas\s+csv\b", OutputFormat::Csv),
             (r"(?i)\bin\s+csv\b", OutputFormat::Csv),
-            (r"(?i)\b(respond|reply|answer|output|format|give|return|provide)\b.{0,20}\byaml\b", OutputFormat::Yaml),
+            (
+                r"(?i)\b(respond|reply|answer|output|format|give|return|provide)\b.{0,20}\byaml\b",
+                OutputFormat::Yaml,
+            ),
             (r"(?i)\bas\s+yaml\b", OutputFormat::Yaml),
             (r"(?i)\bin\s+yaml\b", OutputFormat::Yaml),
-            (r"(?i)\b(respond|reply|answer|output|format|give|return|provide)\b.{0,20}\bcode\b", OutputFormat::Code),
+            (
+                r"(?i)\b(respond|reply|answer|output|format|give|return|provide)\b.{0,20}\bcode\b",
+                OutputFormat::Code,
+            ),
         ];
 
         let inferred = vec![
             (r"(?i)\bjson\b", OutputFormat::Json),
             (r"(?i)\bxml\b", OutputFormat::Xml),
             (r"```", OutputFormat::Code),
-            (r"(?i)\bcode\s*(block|snippet|example)\b", OutputFormat::Code),
+            (
+                r"(?i)\bcode\s*(block|snippet|example)\b",
+                OutputFormat::Code,
+            ),
             (r"(?i)\byaml\b", OutputFormat::Yaml),
             (r"(?i)\bcsv\b", OutputFormat::Csv),
             (r"(?i)\btable\b", OutputFormat::Table),
@@ -100,10 +127,7 @@ impl OutputFormatSignal {
 
 #[async_trait]
 impl Signal for OutputFormatSignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         let text = &ctx.text;
         let mut labels = Vec::new();
         let mut confidence = 0.0_f64;

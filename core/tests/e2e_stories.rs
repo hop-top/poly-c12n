@@ -3,14 +3,12 @@ mod common;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use c12n_core::types::SignalType;
-use c12n_core::Pipeline;
 use c12n_core::signals::code::CodeContentSignal;
 use c12n_core::signals::cost::CostEstimateSignal;
 use c12n_core::signals::format::OutputFormatSignal;
-use c12n_core::signals::keyword::{
-    KeywordRule, KeywordSignal, MatchOperator, MatchStrategy,
-};
+use c12n_core::signals::keyword::{KeywordRule, KeywordSignal, MatchOperator, MatchStrategy};
+use c12n_core::types::SignalType;
+use c12n_core::Pipeline;
 use common::{make_ctx, FailingSignal, MockSignal};
 
 // ---------------------------------------------------------------------------
@@ -92,7 +90,11 @@ async fn coverage_all_16_signal_types_representable() {
     let pipeline = Pipeline::new(signals, 8, Duration::from_secs(5));
     let result = pipeline.evaluate(&make_ctx("coverage test")).await;
 
-    assert_eq!(result.results.len(), 16, "all 16 signal types should produce results");
+    assert_eq!(
+        result.results.len(),
+        16,
+        "all 16 signal types should produce results"
+    );
     assert!(result.errors.is_empty());
 
     let mut seen: Vec<SignalType> = result.results.iter().map(|r| r.signal_type).collect();
@@ -123,14 +125,29 @@ async fn coverage_multiple_texts_activate_different_signals() {
     );
 
     // Python prompt should trigger keyword + code
-    let r1 = pipeline.evaluate(&make_ctx("Write Python code for sorting")).await;
-    let kw_r = r1.results.iter().find(|r| r.signal_type == SignalType::Keyword).unwrap();
+    let r1 = pipeline
+        .evaluate(&make_ctx("Write Python code for sorting"))
+        .await;
+    let kw_r = r1
+        .results
+        .iter()
+        .find(|r| r.signal_type == SignalType::Keyword)
+        .unwrap();
     assert!(kw_r.confidence > 0.0, "python keyword should match");
 
     // Plain greeting should not trigger keyword
-    let r2 = pipeline.evaluate(&make_ctx("Good morning, how are you?")).await;
-    let kw_r2 = r2.results.iter().find(|r| r.signal_type == SignalType::Keyword).unwrap();
-    assert_eq!(kw_r2.confidence, 0.0, "greeting should not trigger python keyword");
+    let r2 = pipeline
+        .evaluate(&make_ctx("Good morning, how are you?"))
+        .await;
+    let kw_r2 = r2
+        .results
+        .iter()
+        .find(|r| r.signal_type == SignalType::Keyword)
+        .unwrap();
+    assert_eq!(
+        kw_r2.confidence, 0.0,
+        "greeting should not trigger python keyword"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -188,8 +205,7 @@ async fn json_signal_result_roundtrip() {
     };
 
     let json_str = serde_json::to_string(&original).expect("serialize");
-    let decoded: c12n_core::SignalResult =
-        serde_json::from_str(&json_str).expect("deserialize");
+    let decoded: c12n_core::SignalResult = serde_json::from_str(&json_str).expect("deserialize");
 
     assert_eq!(decoded.name, original.name);
     assert_eq!(decoded.signal_type, original.signal_type);
@@ -248,7 +264,10 @@ async fn threshold_one_filters_all_sub_1() {
         .iter()
         .filter(|r| r.confidence >= threshold)
         .collect();
-    assert!(passing.is_empty(), "threshold 1.0 should filter all sub-1.0 signals");
+    assert!(
+        passing.is_empty(),
+        "threshold 1.0 should filter all sub-1.0 signals"
+    );
 }
 
 #[tokio::test]
@@ -331,7 +350,10 @@ async fn error_handling_timeout_produces_error() {
     assert!(result.results.is_empty());
     assert_eq!(result.errors.len(), 1);
     let err = format!("{}", result.errors[0]);
-    assert!(err.contains("slow"), "timeout error should name the signal: {err}");
+    assert!(
+        err.contains("slow"),
+        "timeout error should name the signal: {err}"
+    );
 }
 
 #[tokio::test]

@@ -36,10 +36,7 @@ impl ComplexitySignal {
 
 #[async_trait]
 impl Signal for ComplexitySignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         let embedding = self
             .engine
             .embed(&ctx.text)
@@ -65,18 +62,9 @@ impl Signal for ComplexitySignal {
         };
 
         let mut metadata = HashMap::new();
-        metadata.insert(
-            "hard_score".into(),
-            serde_json::Value::from(hard_score),
-        );
-        metadata.insert(
-            "easy_score".into(),
-            serde_json::Value::from(easy_score),
-        );
-        metadata.insert(
-            "margin".into(),
-            serde_json::Value::from(self.margin),
-        );
+        metadata.insert("hard_score".into(), serde_json::Value::from(hard_score));
+        metadata.insert("easy_score".into(), serde_json::Value::from(easy_score));
+        metadata.insert("margin".into(), serde_json::Value::from(self.margin));
 
         Ok(SignalResult {
             name: self.name.clone(),
@@ -111,10 +99,7 @@ mod tests {
             Ok(self.vector.clone())
         }
 
-        async fn embed_batch(
-            &self,
-            texts: &[&str],
-        ) -> Result<Vec<Vec<f32>>, EmbeddingError> {
+        async fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, EmbeddingError> {
             Ok(texts.iter().map(|_| self.vector.clone()).collect())
         }
 

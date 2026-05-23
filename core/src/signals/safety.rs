@@ -42,10 +42,7 @@ impl JailbreakSignal {
 
 #[async_trait]
 impl Signal for JailbreakSignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         let h = Self::hash_text(&ctx.text);
 
         // Check dedup cache
@@ -103,10 +100,7 @@ pub struct PiiEntity {
 
 #[async_trait]
 pub trait PiiDetector: Send + Sync {
-    async fn detect_entities(
-        &self,
-        text: &str,
-    ) -> Result<Vec<PiiEntity>, SignalError>;
+    async fn detect_entities(&self, text: &str) -> Result<Vec<PiiEntity>, SignalError>;
 }
 
 pub struct PiiSignal {
@@ -152,9 +146,7 @@ impl PiiSignal {
             chunks.push((start, &text[start..actual_end]));
             start = actual_end;
             // Skip whitespace between chunks
-            while start < text.len()
-                && text[start..].starts_with(char::is_whitespace)
-            {
+            while start < text.len() && text[start..].starts_with(char::is_whitespace) {
                 start += 1;
             }
         }
@@ -165,10 +157,7 @@ impl PiiSignal {
 
 #[async_trait]
 impl Signal for PiiSignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         let chunks = Self::chunk_text(&ctx.text, self.max_chunk_size);
         let mut all_entities: Vec<PiiEntity> = Vec::new();
 
@@ -191,21 +180,15 @@ impl Signal for PiiSignal {
         let confidence = if flagged.is_empty() {
             0.0
         } else {
-            flagged
-                .iter()
-                .map(|e| e.confidence)
-                .fold(0.0_f64, f64::max)
+            flagged.iter().map(|e| e.confidence).fold(0.0_f64, f64::max)
         };
 
-        let labels: Vec<String> =
-            flagged.iter().map(|e| e.entity_type.clone()).collect();
+        let labels: Vec<String> = flagged.iter().map(|e| e.entity_type.clone()).collect();
 
         let mut metadata = HashMap::new();
         metadata.insert(
             "entity_count".to_string(),
-            serde_json::Value::Number(
-                serde_json::Number::from(flagged.len()),
-            ),
+            serde_json::Value::Number(serde_json::Number::from(flagged.len())),
         );
 
         let entity_details: Vec<serde_json::Value> = flagged
@@ -249,10 +232,7 @@ impl Signal for PiiSignal {
 #[async_trait]
 pub trait ToxicityDetector: Send + Sync {
     /// Returns vec of (category, score).
-    async fn detect(
-        &self,
-        text: &str,
-    ) -> Result<Vec<(String, f64)>, SignalError>;
+    async fn detect(&self, text: &str) -> Result<Vec<(String, f64)>, SignalError>;
 }
 
 pub struct ToxicitySignal {
@@ -271,10 +251,7 @@ impl ToxicitySignal {
 
 #[async_trait]
 impl Signal for ToxicitySignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         let scores = self.detector.detect(&ctx.text).await?;
 
         let flagged: Vec<&(String, f64)> = scores
@@ -282,13 +259,9 @@ impl Signal for ToxicitySignal {
             .filter(|(_, score)| *score > self.threshold)
             .collect();
 
-        let confidence = flagged
-            .iter()
-            .map(|(_, s)| *s)
-            .fold(0.0_f64, f64::max);
+        let confidence = flagged.iter().map(|(_, s)| *s).fold(0.0_f64, f64::max);
 
-        let labels: Vec<String> =
-            flagged.iter().map(|(cat, _)| cat.clone()).collect();
+        let labels: Vec<String> = flagged.iter().map(|(cat, _)| cat.clone()).collect();
 
         let mut metadata = HashMap::new();
         let scores_map: serde_json::Map<String, serde_json::Value> = scores
@@ -297,20 +270,13 @@ impl Signal for ToxicitySignal {
                 (
                     cat.clone(),
                     serde_json::Value::Number(
-                        serde_json::Number::from_f64(*score)
-                            .unwrap_or(serde_json::Number::from(0)),
+                        serde_json::Number::from_f64(*score).unwrap_or(serde_json::Number::from(0)),
                     ),
                 )
             })
             .collect();
-        metadata.insert(
-            "scores".to_string(),
-            serde_json::Value::Object(scores_map),
-        );
-        metadata.insert(
-            "threshold".to_string(),
-            serde_json::json!(self.threshold),
-        );
+        metadata.insert("scores".to_string(), serde_json::Value::Object(scores_map));
+        metadata.insert("threshold".to_string(), serde_json::json!(self.threshold));
 
         Ok(SignalResult {
             name: self.name().to_string(),
@@ -347,10 +313,7 @@ mod tests {
 
     #[async_trait]
     impl JailbreakDetector for MockJailbreakDetector {
-        async fn detect(
-            &self,
-            _text: &str,
-        ) -> Result<(f64, Vec<String>), SignalError> {
+        async fn detect(&self, _text: &str) -> Result<(f64, Vec<String>), SignalError> {
             Ok((self.confidence, self.labels.clone()))
         }
     }
@@ -359,10 +322,7 @@ mod tests {
 
     #[async_trait]
     impl JailbreakDetector for FailingJailbreakDetector {
-        async fn detect(
-            &self,
-            _text: &str,
-        ) -> Result<(f64, Vec<String>), SignalError> {
+        async fn detect(&self, _text: &str) -> Result<(f64, Vec<String>), SignalError> {
             Err(SignalError::Inference("boom".into()))
         }
     }
@@ -373,10 +333,7 @@ mod tests {
 
     #[async_trait]
     impl PiiDetector for MockPiiDetector {
-        async fn detect_entities(
-            &self,
-            _text: &str,
-        ) -> Result<Vec<PiiEntity>, SignalError> {
+        async fn detect_entities(&self, _text: &str) -> Result<Vec<PiiEntity>, SignalError> {
             Ok(self.entities.clone())
         }
     }
@@ -387,10 +344,7 @@ mod tests {
 
     #[async_trait]
     impl ToxicityDetector for MockToxicityDetector {
-        async fn detect(
-            &self,
-            _text: &str,
-        ) -> Result<Vec<(String, f64)>, SignalError> {
+        async fn detect(&self, _text: &str) -> Result<Vec<(String, f64)>, SignalError> {
             Ok(self.scores.clone())
         }
     }
@@ -435,11 +389,9 @@ mod tests {
 
     #[tokio::test]
     async fn jailbreak_fail_closed_on_error() {
-        let signal =
-            JailbreakSignal::new(Box::new(FailingJailbreakDetector));
+        let signal = JailbreakSignal::new(Box::new(FailingJailbreakDetector));
 
-        let result =
-            signal.evaluate(&make_ctx("anything")).await.unwrap();
+        let result = signal.evaluate(&make_ctx("anything")).await.unwrap();
         assert_eq!(result.confidence, 1.0);
         assert!(result.labels.contains(&"error_failclosed".to_string()));
     }
@@ -471,7 +423,10 @@ mod tests {
         deny.insert("EMAIL".into());
 
         let signal = PiiSignal::new(Box::new(detector), deny, 4096);
-        let result = signal.evaluate(&make_ctx("a@b.com hi Alice")).await.unwrap();
+        let result = signal
+            .evaluate(&make_ctx("a@b.com hi Alice"))
+            .await
+            .unwrap();
 
         assert_eq!(result.signal_type, SignalType::PII);
         assert_eq!(result.confidence, 0.99);
@@ -497,7 +452,10 @@ mod tests {
         assert!(chunks.len() >= 2);
         // Every chunk starts at the right offset
         for (offset, chunk) in &chunks {
-            assert_eq!(&"hello world foo bar"[*offset..*offset + chunk.len()], *chunk);
+            assert_eq!(
+                &"hello world foo bar"[*offset..*offset + chunk.len()],
+                *chunk
+            );
         }
     }
 
@@ -525,10 +483,7 @@ mod tests {
     #[tokio::test]
     async fn toxicity_all_below_threshold() {
         let detector = MockToxicityDetector {
-            scores: vec![
-                ("hate_speech".into(), 0.1),
-                ("violence".into(), 0.2),
-            ],
+            scores: vec![("hate_speech".into(), 0.1), ("violence".into(), 0.2)],
         };
 
         let signal = ToxicitySignal::new(Box::new(detector), 0.5);

@@ -6,9 +6,7 @@ use c12n_core::embedding::EmbeddingEngine;
 use c12n_core::prototype::PrototypeBank;
 use c12n_core::signal::Signal;
 use c12n_core::signals::complexity::ComplexitySignal;
-use c12n_core::signals::embedding_signal::{
-    EmbeddingRule, EmbeddingSignal, EmbeddingSignalConfig,
-};
+use c12n_core::signals::embedding_signal::{EmbeddingRule, EmbeddingSignal, EmbeddingSignalConfig};
 use c12n_core::signals::feedback::{FeedbackSignal, SatisfactionDetector};
 use c12n_core::types::{SignalError, SignalType};
 
@@ -31,10 +29,7 @@ struct FixedSatisfaction(f64);
 
 #[async_trait::async_trait]
 impl SatisfactionDetector for FixedSatisfaction {
-    async fn score(
-        &self,
-        _text: &str,
-    ) -> Result<f64, SignalError> {
+    async fn score(&self, _text: &str) -> Result<f64, SignalError> {
         Ok(self.0)
     }
 }
@@ -45,8 +40,7 @@ impl SatisfactionDetector for FixedSatisfaction {
 
 #[tokio::test]
 async fn embedding_signal_with_prototype_bank() {
-    let engine: Arc<dyn EmbeddingEngine> =
-        Arc::new(MockEmbeddingEngine);
+    let engine: Arc<dyn EmbeddingEngine> = Arc::new(MockEmbeddingEngine);
 
     // MockEmbeddingEngine returns [0.5, 0.5, 0.5, 0.5] for generic text.
     // Build a bank with prototype [0.5, 0.5, 0.5, 0.5] => cosine = 1.0
@@ -89,8 +83,7 @@ async fn embedding_signal_with_prototype_bank() {
 
 #[tokio::test]
 async fn embedding_signal_soft_match() {
-    let engine: Arc<dyn EmbeddingEngine> =
-        Arc::new(MockEmbeddingEngine);
+    let engine: Arc<dyn EmbeddingEngine> = Arc::new(MockEmbeddingEngine);
 
     // Both rules set very high threshold so no hard match occurs
     let config = EmbeddingSignalConfig {
@@ -112,10 +105,7 @@ async fn embedding_signal_soft_match() {
     };
 
     let signal = EmbeddingSignal::new(config, engine);
-    let result = signal
-        .evaluate(&make_ctx("generic text"))
-        .await
-        .unwrap();
+    let result = signal.evaluate(&make_ctx("generic text")).await.unwrap();
 
     // Soft match returns top-k labels
     assert_eq!(result.labels.len(), 2);
@@ -129,21 +119,15 @@ async fn embedding_signal_soft_match() {
 
 #[tokio::test]
 async fn complexity_hard_dominates() {
-    let engine: Arc<dyn EmbeddingEngine> =
-        Arc::new(MockEmbeddingEngine);
+    let engine: Arc<dyn EmbeddingEngine> = Arc::new(MockEmbeddingEngine);
 
     // "hard" text => [1,0,0,0]; hard_bank aligned with [1,0,0,0]
     let hard_bank = make_multi_bank(vec![vec![1.0, 0.0, 0.0, 0.0]]);
     let easy_bank = make_multi_bank(vec![vec![0.0, 1.0, 0.0, 0.0]]);
 
-    let signal = ComplexitySignal::new(
-        "cplx", hard_bank, easy_bank, engine, 0.1,
-    );
+    let signal = ComplexitySignal::new("cplx", hard_bank, easy_bank, engine, 0.1);
 
-    let result = signal
-        .evaluate(&make_ctx("this is hard"))
-        .await
-        .unwrap();
+    let result = signal.evaluate(&make_ctx("this is hard")).await.unwrap();
 
     assert_eq!(result.signal_type, SignalType::Complexity);
     assert_eq!(result.labels, vec!["complex"]);
@@ -154,21 +138,15 @@ async fn complexity_hard_dominates() {
 
 #[tokio::test]
 async fn complexity_easy_dominates() {
-    let engine: Arc<dyn EmbeddingEngine> =
-        Arc::new(MockEmbeddingEngine);
+    let engine: Arc<dyn EmbeddingEngine> = Arc::new(MockEmbeddingEngine);
 
     // "easy" text => [0,1,0,0]; easy_bank aligned with [0,1,0,0]
     let hard_bank = make_multi_bank(vec![vec![1.0, 0.0, 0.0, 0.0]]);
     let easy_bank = make_multi_bank(vec![vec![0.0, 1.0, 0.0, 0.0]]);
 
-    let signal = ComplexitySignal::new(
-        "cplx", hard_bank, easy_bank, engine, 0.1,
-    );
+    let signal = ComplexitySignal::new("cplx", hard_bank, easy_bank, engine, 0.1);
 
-    let result = signal
-        .evaluate(&make_ctx("this is easy"))
-        .await
-        .unwrap();
+    let result = signal.evaluate(&make_ctx("this is easy")).await.unwrap();
 
     assert_eq!(result.labels, vec!["simple"]);
     assert!(result.confidence > 0.5);
@@ -176,16 +154,13 @@ async fn complexity_easy_dominates() {
 
 #[tokio::test]
 async fn complexity_moderate_within_margin() {
-    let engine: Arc<dyn EmbeddingEngine> =
-        Arc::new(MockEmbeddingEngine);
+    let engine: Arc<dyn EmbeddingEngine> = Arc::new(MockEmbeddingEngine);
 
     // Generic text => [0.5,0.5,0.5,0.5]; both banks score similarly
     let hard_bank = make_multi_bank(vec![vec![1.0, 0.0, 0.0, 0.0]]);
     let easy_bank = make_multi_bank(vec![vec![0.0, 1.0, 0.0, 0.0]]);
 
-    let signal = ComplexitySignal::new(
-        "cplx", hard_bank, easy_bank, engine, 0.5,
-    );
+    let signal = ComplexitySignal::new("cplx", hard_bank, easy_bank, engine, 0.5);
 
     let result = signal
         .evaluate(&make_ctx("generic text here"))
@@ -203,17 +178,13 @@ async fn complexity_moderate_within_margin() {
 #[tokio::test]
 async fn feedback_detects_reask_with_similar_history() {
     let detector = Arc::new(FixedSatisfaction(0.3));
-    let engine: Arc<dyn EmbeddingEngine> =
-        Arc::new(MockEmbeddingEngine);
+    let engine: Arc<dyn EmbeddingEngine> = Arc::new(MockEmbeddingEngine);
 
     // MockEmbeddingEngine returns same vector for same-ish text
     // => cosine similarity = 1.0 => reask detected
     let signal = FeedbackSignal::new("fb", detector, engine, 0.8);
 
-    let ctx = make_ctx_with_history(
-        "tell me about X",
-        vec!["tell me about X"],
-    );
+    let ctx = make_ctx_with_history("tell me about X", vec!["tell me about X"]);
     let result = signal.evaluate(&ctx).await.unwrap();
 
     assert!(
@@ -247,8 +218,7 @@ async fn feedback_no_reask_different_content() {
         async fn embed_batch(
             &self,
             texts: &[&str],
-        ) -> Result<Vec<Vec<f32>>, c12n_core::embedding::EmbeddingError>
-        {
+        ) -> Result<Vec<Vec<f32>>, c12n_core::embedding::EmbeddingError> {
             // Return orthogonal vectors for different texts
             Ok(texts
                 .iter()
@@ -269,10 +239,7 @@ async fn feedback_no_reask_different_content() {
     let engine: Arc<dyn EmbeddingEngine> = Arc::new(DiffEngine);
     let signal = FeedbackSignal::new("fb", detector, engine, 0.8);
 
-    let ctx = make_ctx_with_history(
-        "new question",
-        vec!["old question"],
-    );
+    let ctx = make_ctx_with_history("new question", vec!["old question"]);
     let result = signal.evaluate(&ctx).await.unwrap();
 
     assert!(
@@ -284,14 +251,10 @@ async fn feedback_no_reask_different_content() {
 #[tokio::test]
 async fn feedback_no_reask_without_history() {
     let detector = Arc::new(FixedSatisfaction(0.9));
-    let engine: Arc<dyn EmbeddingEngine> =
-        Arc::new(MockEmbeddingEngine);
+    let engine: Arc<dyn EmbeddingEngine> = Arc::new(MockEmbeddingEngine);
 
     let signal = FeedbackSignal::new("fb", detector, engine, 0.8);
-    let result = signal
-        .evaluate(&make_ctx("first message"))
-        .await
-        .unwrap();
+    let result = signal.evaluate(&make_ctx("first message")).await.unwrap();
 
     assert!(
         !result.labels.contains(&"reask".to_string()),

@@ -24,17 +24,9 @@ impl PipelineConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PipelineConfigBuilder {
     cfg: PipelineConfig,
-}
-
-impl Default for PipelineConfigBuilder {
-    fn default() -> Self {
-        Self {
-            cfg: PipelineConfig::default(),
-        }
-    }
 }
 
 impl PipelineConfigBuilder {

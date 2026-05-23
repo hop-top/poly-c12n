@@ -87,7 +87,8 @@ impl PrototypeBank {
             .map(|(proto, &w)| cosine_similarity(proto, query) * w)
             .collect();
 
-        weighted_sims.sort_unstable_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+        weighted_sims
+            .sort_unstable_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
 
         let max_sim = weighted_sims[0] as f64;
 
@@ -125,10 +126,7 @@ mod tests {
     #[test]
     fn score_blends_best_and_top_m() {
         let bank = uniform_bank(
-            vec![
-                vec![1.0, 0.0, 0.0, 0.0],
-                vec![0.0, 1.0, 0.0, 0.0],
-            ],
+            vec![vec![1.0, 0.0, 0.0, 0.0], vec![0.0, 1.0, 0.0, 0.0]],
             0.6,
             2,
         );

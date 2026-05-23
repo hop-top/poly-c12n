@@ -19,10 +19,10 @@ use tokio::task::JoinSet;
 // follow-up (refactor signal scheduler around `wasm-bindgen-futures`
 // timeouts and drop tokio's `time` feature on wasm32) tracks the
 // idiomatic fix; see ADR-0001.
-#[cfg(not(feature = "wasm"))]
-use std::time::Instant;
 #[cfg(feature = "wasm")]
 use instant::Instant;
+#[cfg(not(feature = "wasm"))]
+use std::time::Instant;
 
 use crate::signal::Signal;
 use crate::types::{ClassificationContext, SignalError, SignalResult};
@@ -51,11 +51,7 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
-    pub fn new(
-        signals: Vec<Box<dyn Signal>>,
-        max_concurrency: usize,
-        timeout: Duration,
-    ) -> Self {
+    pub fn new(signals: Vec<Box<dyn Signal>>, max_concurrency: usize, timeout: Duration) -> Self {
         Self {
             signals: signals.into_iter().map(Arc::from).collect(),
             semaphore: Arc::new(Semaphore::new(max_concurrency.max(1))),
@@ -88,10 +84,7 @@ impl Pipeline {
 
                 match tokio::time::timeout(timeout_dur, signal.evaluate(&ctx)).await {
                     Ok(Ok(result)) => Ok(result),
-                    Ok(Err(err)) => Err(PipelineError::SignalFailed {
-                        name,
-                        error: err,
-                    }),
+                    Ok(Err(err)) => Err(PipelineError::SignalFailed { name, error: err }),
                     Err(_elapsed) => Err(PipelineError::Timeout { name }),
                 }
             });
@@ -107,9 +100,7 @@ impl Pipeline {
                 Err(join_err) => {
                     errors.push(PipelineError::SignalFailed {
                         name: "unknown".into(),
-                        error: SignalError::Internal(
-                            format!("task panicked: {join_err}"),
-                        ),
+                        error: SignalError::Internal(format!("task panicked: {join_err}")),
                     });
                 }
             }
@@ -237,9 +228,7 @@ mod tests {
         let result = pipeline.evaluate(&make_ctx()).await;
         assert!(result.results.is_empty());
         assert_eq!(result.errors.len(), 1);
-        assert!(
-            matches!(&result.errors[0], PipelineError::Timeout { name } if name == "slow")
-        );
+        assert!(matches!(&result.errors[0], PipelineError::Timeout { name } if name == "slow"));
     }
 
     #[tokio::test]

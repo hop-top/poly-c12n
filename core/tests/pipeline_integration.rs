@@ -2,15 +2,13 @@ mod common;
 
 use std::time::Duration;
 
-use c12n_core::types::SignalType;
-use c12n_core::Pipeline;
 use c12n_core::signals::code::CodeContentSignal;
 use c12n_core::signals::cost::CostEstimateSignal;
 use c12n_core::signals::format::OutputFormatSignal;
-use c12n_core::signals::keyword::{
-    KeywordRule, KeywordSignal, MatchOperator, MatchStrategy,
-};
+use c12n_core::signals::keyword::{KeywordRule, KeywordSignal, MatchOperator, MatchStrategy};
 use c12n_core::signals::toolcall::ToolCallingSignal;
+use c12n_core::types::SignalType;
+use c12n_core::Pipeline;
 
 use common::{make_ctx, FailingSignal, MockSignal};
 
@@ -24,8 +22,7 @@ async fn multi_signal_pipeline() {
     // tool-calling (no action verbs from the tool-calling verb set).
     // Note: "Write a function" triggers Generate intent (regex
     // requires verb + optional "a " + noun with no words between).
-    let prompt =
-        "Write a function in Python that sorts numbers and respond in JSON";
+    let prompt = "Write a function in Python that sorts numbers and respond in JSON";
 
     let keyword = KeywordSignal::new(
         "kw",
@@ -146,11 +143,7 @@ async fn pipeline_error_handling() {
         label: "bad_signal".to_string(),
     };
 
-    let pipeline = Pipeline::new(
-        vec![Box::new(ok), Box::new(bad)],
-        4,
-        Duration::from_secs(1),
-    );
+    let pipeline = Pipeline::new(vec![Box::new(ok), Box::new(bad)], 4, Duration::from_secs(1));
 
     let result = pipeline.evaluate(&make_ctx("test")).await;
 
@@ -187,11 +180,7 @@ async fn pipeline_concurrency() {
     let pipeline = Pipeline::new(signals, 2, Duration::from_secs(5));
     let result = pipeline.evaluate(&make_ctx("concurrent")).await;
 
-    assert_eq!(
-        result.results.len(),
-        5,
-        "all 5 signals should complete",
-    );
+    assert_eq!(result.results.len(), 5, "all 5 signals should complete",);
     assert!(result.errors.is_empty());
     // Concurrency=2 means ceil(5/2)=3 batches * 20ms = 60ms minimum
     assert!(

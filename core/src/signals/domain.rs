@@ -38,10 +38,7 @@ pub const CATEGORIES: &[&str] = &[
 pub trait CategoryClassifier: Send + Sync {
     /// Returns `(category_name, probability)` pairs sorted descending by
     /// probability. Probabilities should sum to ~1.0.
-    async fn classify(
-        &self,
-        text: &str,
-    ) -> Result<Vec<(String, f64)>, SignalError>;
+    async fn classify(&self, text: &str) -> Result<Vec<(String, f64)>, SignalError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,14 +91,9 @@ impl DomainSignal {
 
 #[async_trait]
 impl Signal for DomainSignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         if ctx.text.is_empty() {
-            return Err(SignalError::InvalidInput(
-                "empty text".into(),
-            ));
+            return Err(SignalError::InvalidInput("empty text".into()));
         }
 
         let distribution = self.classifier.classify(&ctx.text).await?;
@@ -140,21 +132,16 @@ impl Signal for DomainSignal {
 
         // Metadata
         let mut metadata = HashMap::new();
-        metadata.insert(
-            "entropy".into(),
-            serde_json::json!(entropy),
-        );
+        metadata.insert("entropy".into(), serde_json::json!(entropy));
         metadata.insert(
             "normalized_entropy".into(),
             serde_json::json!(normalized_entropy),
         );
 
-        let dist_map: HashMap<String, f64> =
-            distribution.into_iter().collect();
+        let dist_map: HashMap<String, f64> = distribution.into_iter().collect();
         metadata.insert(
             "distribution".into(),
-            serde_json::to_value(dist_map)
-                .unwrap_or(serde_json::Value::Null),
+            serde_json::to_value(dist_map).unwrap_or(serde_json::Value::Null),
         );
 
         Ok(SignalResult {
@@ -237,10 +224,7 @@ mod tests {
 
     #[async_trait]
     impl CategoryClassifier for MockClassifier {
-        async fn classify(
-            &self,
-            _text: &str,
-        ) -> Result<Vec<(String, f64)>, SignalError> {
+        async fn classify(&self, _text: &str) -> Result<Vec<(String, f64)>, SignalError> {
             Ok(self.distribution.clone())
         }
     }
@@ -259,16 +243,8 @@ mod tests {
 
     #[tokio::test]
     async fn confident_single_label() {
-        let sig = DomainSignal::new(
-            "domain",
-            Arc::new(MockClassifier::confident()),
-            1.0,
-            0.10,
-        );
-        let result = sig
-            .evaluate(&make_ctx("solve x^2 + 1 = 0"))
-            .await
-            .unwrap();
+        let sig = DomainSignal::new("domain", Arc::new(MockClassifier::confident()), 1.0, 0.10);
+        let result = sig.evaluate(&make_ctx("solve x^2 + 1 = 0")).await.unwrap();
 
         assert_eq!(result.labels, vec!["Math"]);
         assert!((result.confidence - 0.85).abs() < 1e-9);
@@ -317,16 +293,8 @@ mod tests {
 
     #[tokio::test]
     async fn single_category_distribution() {
-        let sig = DomainSignal::new(
-            "domain",
-            Arc::new(MockClassifier::single()),
-            1.0,
-            0.10,
-        );
-        let result = sig
-            .evaluate(&make_ctx("legal precedent"))
-            .await
-            .unwrap();
+        let sig = DomainSignal::new("domain", Arc::new(MockClassifier::single()), 1.0, 0.10);
+        let result = sig.evaluate(&make_ctx("legal precedent")).await.unwrap();
 
         assert_eq!(result.labels, vec!["Law"]);
         assert!((result.confidence - 1.0).abs() < 1e-9);
@@ -340,10 +308,7 @@ mod tests {
             0.1, // low: multi-label
             0.10,
         );
-        let result = sig
-            .evaluate(&make_ctx("random noise"))
-            .await
-            .unwrap();
+        let result = sig.evaluate(&make_ctx("random noise")).await.unwrap();
 
         assert_eq!(result.labels.len(), 5);
         // Confidence should be near zero for max entropy.
@@ -352,58 +317,34 @@ mod tests {
 
     #[tokio::test]
     async fn empty_distribution_errors() {
-        let sig = DomainSignal::new(
-            "domain",
-            Arc::new(MockClassifier::empty()),
-            1.0,
-            0.10,
-        );
-        let err = sig
-            .evaluate(&make_ctx("anything"))
-            .await
-            .unwrap_err();
+        let sig = DomainSignal::new("domain", Arc::new(MockClassifier::empty()), 1.0, 0.10);
+        let err = sig.evaluate(&make_ctx("anything")).await.unwrap_err();
         assert!(err.to_string().contains("empty distribution"));
     }
 
     #[tokio::test]
     async fn empty_text_errors() {
-        let sig = DomainSignal::new(
-            "domain",
-            Arc::new(MockClassifier::confident()),
-            1.0,
-            0.10,
-        );
+        let sig = DomainSignal::new("domain", Arc::new(MockClassifier::confident()), 1.0, 0.10);
         let err = sig.evaluate(&make_ctx("")).await.unwrap_err();
         assert!(err.to_string().contains("empty text"));
     }
 
     #[tokio::test]
     async fn metadata_contains_entropy() {
-        let sig = DomainSignal::new(
-            "domain",
-            Arc::new(MockClassifier::confident()),
-            1.0,
-            0.10,
-        );
-        let result = sig
-            .evaluate(&make_ctx("calculus"))
-            .await
-            .unwrap();
+        let sig = DomainSignal::new("domain", Arc::new(MockClassifier::confident()), 1.0, 0.10);
+        let result = sig.evaluate(&make_ctx("calculus")).await.unwrap();
 
         let entropy = result.metadata["entropy"].as_f64().unwrap();
         assert!(entropy >= 0.0);
 
-        let norm = result.metadata["normalized_entropy"]
-            .as_f64()
-            .unwrap();
+        let norm = result.metadata["normalized_entropy"].as_f64().unwrap();
         assert!(norm >= 0.0);
         assert!(norm <= 1.0);
     }
 
     #[test]
     fn shannon_entropy_deterministic() {
-        let probs =
-            vec![("A".into(), 0.5), ("B".into(), 0.5)];
+        let probs = vec![("A".into(), 0.5), ("B".into(), 0.5)];
         let h = DomainSignal::shannon_entropy(&probs);
         let expected = (2.0_f64).ln(); // ln(2)
         assert!((h - expected).abs() < 1e-9);
@@ -420,10 +361,7 @@ mod tests {
     fn max_entropy_edge_cases() {
         assert_eq!(DomainSignal::max_entropy(0), 0.0);
         assert_eq!(DomainSignal::max_entropy(1), 0.0);
-        assert!(
-            (DomainSignal::max_entropy(2) - (2.0_f64).ln()).abs()
-                < 1e-9
-        );
+        assert!((DomainSignal::max_entropy(2) - (2.0_f64).ln()).abs() < 1e-9);
     }
 
     #[test]

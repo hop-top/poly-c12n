@@ -2,20 +2,14 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use criterion::{
-    black_box, criterion_group, criterion_main, BenchmarkId, Criterion,
-};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use c12n_core::embedding::cosine_similarity;
 use c12n_core::pipeline::Pipeline;
 use c12n_core::prototype::PrototypeBank;
 use c12n_core::signal::Signal;
-use c12n_core::signals::keyword::{
-    KeywordRule, KeywordSignal, MatchOperator, MatchStrategy,
-};
-use c12n_core::types::{
-    ClassificationContext, SignalError, SignalResult, SignalType,
-};
+use c12n_core::signals::keyword::{KeywordRule, KeywordSignal, MatchOperator, MatchStrategy};
+use c12n_core::types::{ClassificationContext, SignalError, SignalResult, SignalType};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,10 +52,7 @@ struct InstantSignal {
 
 #[async_trait]
 impl Signal for InstantSignal {
-    async fn evaluate(
-        &self,
-        _ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, _ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         Ok(SignalResult {
             name: self.label.clone(),
             signal_type: SignalType::Custom,
@@ -91,18 +82,9 @@ fn bench_cosine_similarity(c: &mut Criterion) {
         let a = rand_vec(dim, 42);
         let b = rand_vec(dim, 99);
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(dim),
-            &dim,
-            |bencher, _| {
-                bencher.iter(|| {
-                    black_box(cosine_similarity(
-                        black_box(&a),
-                        black_box(&b),
-                    ))
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(dim), &dim, |bencher, _| {
+            bencher.iter(|| black_box(cosine_similarity(black_box(&a), black_box(&b))));
+        });
     }
 
     group.finish();
@@ -117,21 +99,14 @@ fn bench_prototype_scoring(c: &mut Criterion) {
     let dim = 384;
 
     for &count in &[10, 50, 100] {
-        let protos: Vec<Vec<f32>> =
-            (0..count).map(|i| rand_vec(dim, 1000 + i)).collect();
+        let protos: Vec<Vec<f32>> = (0..count).map(|i| rand_vec(dim, 1000 + i)).collect();
         let weights = vec![1.0_f32; count as usize];
         let bank = PrototypeBank::new(protos, weights, 0.6, 5).unwrap();
         let query = rand_vec(dim, 777);
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(count),
-            &count,
-            |bencher, _| {
-                bencher.iter(|| {
-                    black_box(bank.score(black_box(&query)).unwrap())
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(count), &count, |bencher, _| {
+            bencher.iter(|| black_box(bank.score(black_box(&query)).unwrap()));
+        });
     }
 
     group.finish();
@@ -161,15 +136,9 @@ fn bench_pipeline_latency(c: &mut Criterion) {
 
         let pipeline = Pipeline::new(signals, 10, Duration::from_secs(5));
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(n),
-            &n,
-            |bencher, _| {
-                bencher.iter(|| {
-                    rt.block_on(pipeline.evaluate(black_box(&ctx)))
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bencher, _| {
+            bencher.iter(|| rt.block_on(pipeline.evaluate(black_box(&ctx))));
+        });
     }
 
     group.finish();
@@ -203,15 +172,9 @@ fn bench_keyword_throughput(c: &mut Criterion) {
         let text = repeat_char('x', len);
         let ctx = make_ctx(&text);
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(len),
-            &len,
-            |bencher, _| {
-                bencher.iter(|| {
-                    rt.block_on(signal.evaluate(black_box(&ctx))).unwrap()
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(len), &len, |bencher, _| {
+            bencher.iter(|| rt.block_on(signal.evaluate(black_box(&ctx))).unwrap());
+        });
     }
 
     group.finish();

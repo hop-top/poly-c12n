@@ -40,12 +40,44 @@ impl CodeIntent {
 // ---------------------------------------------------------------------------
 
 const LANGUAGES: &[&str] = &[
-    "rust", "python", "javascript", "typescript", "java", "kotlin",
-    "swift", "go", "golang", "ruby", "php", "csharp", "c#", "cpp",
-    "c\\+\\+", "scala", "haskell", "elixir", "erlang", "clojure",
-    "lua", "perl", "r", "matlab", "julia", "dart", "zig", "nim",
-    "ocaml", "fortran", "sql", "bash", "shell", "powershell",
-    "objective-c", "assembly", "html", "css",
+    "rust",
+    "python",
+    "javascript",
+    "typescript",
+    "java",
+    "kotlin",
+    "swift",
+    "go",
+    "golang",
+    "ruby",
+    "php",
+    "csharp",
+    "c#",
+    "cpp",
+    "c\\+\\+",
+    "scala",
+    "haskell",
+    "elixir",
+    "erlang",
+    "clojure",
+    "lua",
+    "perl",
+    "r",
+    "matlab",
+    "julia",
+    "dart",
+    "zig",
+    "nim",
+    "ocaml",
+    "fortran",
+    "sql",
+    "bash",
+    "shell",
+    "powershell",
+    "objective-c",
+    "assembly",
+    "html",
+    "css",
 ];
 
 // ---------------------------------------------------------------------------
@@ -65,9 +97,7 @@ impl CodeContentSignal {
         let lang_patterns: Vec<(Regex, String)> = LANGUAGES
             .iter()
             .map(|lang| {
-                let display = lang
-                    .replace("\\+", "+")
-                    .replace("\\", "");
+                let display = lang.replace("\\+", "+").replace("\\", "");
                 let is_word_only = display
                     .chars()
                     .all(|ch| ch.is_ascii_alphanumeric() || ch == '_');
@@ -81,14 +111,38 @@ impl CodeContentSignal {
             .collect();
 
         let intent_patterns = vec![
-            (r"(?i)\b(write|create|implement|build|generate|make)\s+(a\s+)?(function|class|method|program|script|module|api|code)\b", CodeIntent::Generate),
-            (r"(?i)\b(review|check|audit|inspect|analyze)\s+(this\s+|my\s+|the\s+)?(code|implementation|function|class)\b", CodeIntent::Review),
-            (r"(?i)\b(fix|debug|troubleshoot|solve|resolve)\s+(this\s+|my\s+|the\s+)?(bug|error|issue|problem|code)\b", CodeIntent::Debug),
-            (r"(?i)\bwhat\s+does\s+(this|the)\s+(code|function|method|class)\s+do\b", CodeIntent::Explain),
-            (r"(?i)\b(explain|understand|walk\s+through|describe)\s+(this\s+|the\s+)?(code|function|method|class|snippet)\b", CodeIntent::Explain),
-            (r"(?i)\b(refactor|improve|optimize|clean\s+up|simplify)\s+(this\s+|my\s+|the\s+)?(code|function|method|class|implementation)\b", CodeIntent::Refactor),
-            (r"(?i)\b(write|create|add|generate)\s+(a\s+)?(unit\s+)?test", CodeIntent::Test),
-            (r"(?i)\b(document|add\s+docs|write\s+docs|add\s+comments|docstring)\b", CodeIntent::Document),
+            (
+                r"(?i)\b(write|create|implement|build|generate|make)\s+(a\s+)?(function|class|method|program|script|module|api|code)\b",
+                CodeIntent::Generate,
+            ),
+            (
+                r"(?i)\b(review|check|audit|inspect|analyze)\s+(this\s+|my\s+|the\s+)?(code|implementation|function|class)\b",
+                CodeIntent::Review,
+            ),
+            (
+                r"(?i)\b(fix|debug|troubleshoot|solve|resolve)\s+(this\s+|my\s+|the\s+)?(bug|error|issue|problem|code)\b",
+                CodeIntent::Debug,
+            ),
+            (
+                r"(?i)\bwhat\s+does\s+(this|the)\s+(code|function|method|class)\s+do\b",
+                CodeIntent::Explain,
+            ),
+            (
+                r"(?i)\b(explain|understand|walk\s+through|describe)\s+(this\s+|the\s+)?(code|function|method|class|snippet)\b",
+                CodeIntent::Explain,
+            ),
+            (
+                r"(?i)\b(refactor|improve|optimize|clean\s+up|simplify)\s+(this\s+|my\s+|the\s+)?(code|function|method|class|implementation)\b",
+                CodeIntent::Refactor,
+            ),
+            (
+                r"(?i)\b(write|create|add|generate)\s+(a\s+)?(unit\s+)?test",
+                CodeIntent::Test,
+            ),
+            (
+                r"(?i)\b(document|add\s+docs|write\s+docs|add\s+comments|docstring)\b",
+                CodeIntent::Document,
+            ),
         ];
 
         Self {
@@ -108,10 +162,7 @@ impl CodeContentSignal {
 
 #[async_trait]
 impl Signal for CodeContentSignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         let text = &ctx.text;
         let mut labels = Vec::new();
         let mut confidence = 0.0_f64;
@@ -162,10 +213,7 @@ impl Signal for CodeContentSignal {
         );
         metadata.insert(
             "intent".to_string(),
-            serde_json::to_value(
-                intent.map(|i| i.as_str().to_string()),
-            )
-            .unwrap(),
+            serde_json::to_value(intent.map(|i| i.as_str().to_string())).unwrap(),
         );
         metadata.insert(
             "has_code_fence".to_string(),
@@ -217,10 +265,7 @@ mod tests {
             .unwrap();
         assert!(r.confidence >= 0.9);
         assert!(r.labels.contains(&"lang:rust".to_string()));
-        assert_eq!(
-            r.metadata["has_code_fence"],
-            serde_json::Value::Bool(true),
-        );
+        assert_eq!(r.metadata["has_code_fence"], serde_json::Value::Bool(true),);
     }
 
     #[tokio::test]
@@ -237,20 +282,14 @@ mod tests {
     #[tokio::test]
     async fn detects_debug_intent() {
         let s = CodeContentSignal::new("code");
-        let r = s
-            .evaluate(&ctx("Fix this bug in my code"))
-            .await
-            .unwrap();
+        let r = s.evaluate(&ctx("Fix this bug in my code")).await.unwrap();
         assert!(r.labels.contains(&"intent:debug".to_string()));
     }
 
     #[tokio::test]
     async fn detects_explain_intent() {
         let s = CodeContentSignal::new("code");
-        let r = s
-            .evaluate(&ctx("What does this code do?"))
-            .await
-            .unwrap();
+        let r = s.evaluate(&ctx("What does this code do?")).await.unwrap();
         assert!(r.labels.contains(&"intent:explain".to_string()));
     }
 
@@ -278,9 +317,7 @@ mod tests {
     async fn detects_multiple_languages() {
         let s = CodeContentSignal::new("code");
         let r = s
-            .evaluate(&ctx(
-                "Convert this Python script to JavaScript",
-            ))
+            .evaluate(&ctx("Convert this Python script to JavaScript"))
             .await
             .unwrap();
         assert!(r.labels.contains(&"lang:python".to_string()));

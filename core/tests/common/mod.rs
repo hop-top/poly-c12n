@@ -1,12 +1,14 @@
+#![allow(dead_code)]
+//! Shared helpers across integration test binaries. Each binary uses a
+//! subset, so blanket-allow dead_code at the module level.
+
 use std::collections::HashMap;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use c12n_core::embedding::{EmbeddingEngine, EmbeddingError};
 use c12n_core::signal::Signal;
-use c12n_core::types::{
-    ClassificationContext, SignalError, SignalResult, SignalType,
-};
+use c12n_core::types::{ClassificationContext, SignalError, SignalResult, SignalType};
 
 // ---------------------------------------------------------------------------
 // MockEmbeddingEngine
@@ -24,10 +26,7 @@ impl EmbeddingEngine for MockEmbeddingEngine {
         Ok(vector_for(text))
     }
 
-    async fn embed_batch(
-        &self,
-        texts: &[&str],
-    ) -> Result<Vec<Vec<f32>>, EmbeddingError> {
+    async fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, EmbeddingError> {
         Ok(texts.iter().map(|t| vector_for(t)).collect())
     }
 
@@ -61,10 +60,7 @@ pub struct MockSignal {
 
 #[async_trait]
 impl Signal for MockSignal {
-    async fn evaluate(
-        &self,
-        _ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, _ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         if !self.delay.is_zero() {
             tokio::time::sleep(self.delay).await;
         }
@@ -97,10 +93,7 @@ pub struct FailingSignal {
 
 #[async_trait]
 impl Signal for FailingSignal {
-    async fn evaluate(
-        &self,
-        _ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, _ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         Err(SignalError::Internal(format!(
             "{} always fails",
             self.label
@@ -130,10 +123,7 @@ pub fn make_ctx(text: &str) -> ClassificationContext {
     }
 }
 
-pub fn make_ctx_with_history(
-    text: &str,
-    history: Vec<&str>,
-) -> ClassificationContext {
+pub fn make_ctx_with_history(text: &str, history: Vec<&str>) -> ClassificationContext {
     ClassificationContext {
         text: text.to_string(),
         history: history.into_iter().map(String::from).collect(),

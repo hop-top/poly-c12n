@@ -27,11 +27,7 @@ pub struct CostEstimateSignal {
 }
 
 impl CostEstimateSignal {
-    pub fn new(
-        name: impl Into<String>,
-        models: Vec<ModelCost>,
-        output_ratio: f64,
-    ) -> Self {
+    pub fn new(name: impl Into<String>, models: Vec<ModelCost>, output_ratio: f64) -> Self {
         Self {
             name: name.into(),
             models,
@@ -93,10 +89,7 @@ impl CostEstimateSignal {
 
 #[async_trait]
 impl Signal for CostEstimateSignal {
-    async fn evaluate(
-        &self,
-        ctx: &ClassificationContext,
-    ) -> Result<SignalResult, SignalError> {
+    async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         let input_tokens = Self::estimate_tokens(&ctx.text);
         let output_tokens = input_tokens * self.output_ratio;
 
@@ -105,10 +98,8 @@ impl Signal for CostEstimateSignal {
         let mut min_cost = f64::MAX;
 
         for mc in &self.models {
-            let input_cost =
-                (input_tokens / 1000.0) * mc.input_cost_per_1k;
-            let output_cost =
-                (output_tokens / 1000.0) * mc.output_cost_per_1k;
+            let input_cost = (input_tokens / 1000.0) * mc.input_cost_per_1k;
+            let output_cost = (output_tokens / 1000.0) * mc.output_cost_per_1k;
             let total = input_cost + output_cost;
 
             let tier = Self::cost_tier(total);
@@ -141,10 +132,7 @@ impl Signal for CostEstimateSignal {
             "per_model".to_string(),
             serde_json::to_value(&per_model).unwrap(),
         );
-        metadata.insert(
-            "input_tokens".to_string(),
-            serde_json::json!(input_tokens),
-        );
+        metadata.insert("input_tokens".to_string(), serde_json::json!(input_tokens));
         metadata.insert(
             "output_tokens".to_string(),
             serde_json::json!(output_tokens),
@@ -211,9 +199,8 @@ mod tests {
     #[tokio::test]
     async fn token_estimate_scales() {
         let short = CostEstimateSignal::estimate_tokens("hi");
-        let long = CostEstimateSignal::estimate_tokens(
-            "This is a much longer prompt with many words",
-        );
+        let long =
+            CostEstimateSignal::estimate_tokens("This is a much longer prompt with many words");
         assert!(long > short);
     }
 
