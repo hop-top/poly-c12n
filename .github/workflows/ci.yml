@@ -177,8 +177,6 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ts
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -194,14 +192,14 @@ jobs:
           else
             curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
           fi
-      - name: wasm-pack build
-        shell: bash
-        working-directory: ts
-        run: wasm-pack build --target bundler --release
       - name: install JS deps
         shell: bash
         working-directory: ts
         run: pnpm install --frozen-lockfile
+      - name: wasm-pack build (bundler + nodejs)
+        shell: bash
+        working-directory: ts
+        run: pnpm build:wasm:bundler && pnpm build:wasm:nodejs
       - name: vitest (nodejs target)
         shell: bash
         working-directory: ts
