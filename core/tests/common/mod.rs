@@ -1,3 +1,7 @@
+#![allow(dead_code)]
+//! Shared helpers across integration test binaries. Each binary uses a
+//! subset, so blanket-allow dead_code at the module level.
+
 use std::collections::HashMap;
 use std::time::Duration;
 

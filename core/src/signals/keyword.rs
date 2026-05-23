@@ -179,7 +179,7 @@ impl KeywordSignal {
 
         let score = idf * tf_norm;
         // Normalise to 0..1 with a sigmoid-style clamp.
-        Ok(score.max(0.0).min(1.0))
+        Ok(score.clamp(0.0, 1.0))
     }
 
     fn tokenize(text: &str) -> Vec<String> {

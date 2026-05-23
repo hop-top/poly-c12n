@@ -17,6 +17,8 @@
  *
  * `config_json`: JSON string with `max_concurrency` and `timeout_ms`.
  * Returns null on error.
+ * # Safety
+ * `config_json` must be a valid null-terminated C string pointer, or null.
  */
 void *c12n_pipeline_new(const char *config_json);
 
@@ -28,16 +30,27 @@ void *c12n_pipeline_new(const char *config_json);
  *
  * Returns a heap-allocated JSON string. Caller must free with
  * `c12n_result_free`. Returns a JSON error object on failure.
+ * # Safety
+ * `pipeline` must be a valid pointer returned by `c12n_pipeline_new`, or null.
+ * `context_json` must be a valid null-terminated C string pointer, or null.
  */
 char *c12n_pipeline_evaluate(const void *pipeline, const char *context_json);
 
 /**
  * Free a pipeline created by `c12n_pipeline_new`.
+ *
+ * # Safety
+ * `pipeline` must be a valid pointer returned by `c12n_pipeline_new` (and not
+ * already freed), or null.
  */
 void c12n_pipeline_free(void *pipeline);
 
 /**
  * Free a result string returned by `c12n_pipeline_evaluate`.
+ *
+ * # Safety
+ * `result` must be a pointer returned by `c12n_pipeline_evaluate` (and not
+ * already freed), or null.
  */
 void c12n_result_free(char *result);
 

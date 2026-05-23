@@ -224,7 +224,7 @@ fn rand_vec_covers_negative_values() {
     assert!(has_positive, "rand_vec should produce positive values");
 
     // All values in [-1, 1]
-    assert!(values.iter().all(|&v| v >= -1.0 && v <= 1.0));
+    assert!(values.iter().all(|&v| (-1.0..=1.0).contains(&v)));
 }
 
 // ---- 7. PiiSignal: chunk_text is non-overlapping ----
