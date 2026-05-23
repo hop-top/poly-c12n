@@ -1,0 +1,6 @@
+/vendor/
+/runtime/lib/*
+!/runtime/lib/.gitkeep
+/.phpunit.result.cache
+/.phpunit.cache/
+/composer.lock

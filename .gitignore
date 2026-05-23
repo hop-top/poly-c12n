@@ -1,0 +1,32 @@
+# Binaries
+/c12n
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go test artifacts
+*.test
+*.out
+coverage.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# Future Rust core (not yet in repo)
+/target
+
+# Future Python bindings (not yet in repo)
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+.DS_Store

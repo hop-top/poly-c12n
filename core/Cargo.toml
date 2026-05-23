@@ -1,0 +1,73 @@
+[package]
+name = "hop-top-c12n-core"
+version = "0.1.0-alpha.0"
+edition = "2021"
+build = "build.rs"
+description = "c12n classification engine — Rust core with C ABI for cross-language FFI consumers"
+license = "TBD"
+repository = "https://github.com/hop-top/poly-c12n"
+homepage = "https://github.com/hop-top/poly-c12n"
+keywords = ["llm", "classification", "routing", "ffi"]
+categories = ["api-bindings", "algorithms"]
+
+[lib]
+name = "c12n_core"
+crate-type = ["lib", "cdylib"]
+
+[features]
+default = []
+# Enable WebAssembly bindings (consumed by c12n-ts).
+# Swaps the multi-threaded tokio runtime for a single-threaded executor
+# and exposes a `wasm` module with `#[wasm_bindgen]` types parallel to
+# the cgo/PyO3 surface in `ffi.rs`. See ADR-0001.
+#
+# The `instant` crate provides a `performance.now()`-backed `Instant` on
+# wasm32 so `pipeline.rs`'s explicit `Instant::now()` call no longer hits
+# `std::time::Instant`'s `unreachable!()` stub on `wasm32-unknown-unknown`.
+# See ADR-0001 (Implementation Notes) for the time-on-wasm gotcha and the
+# option-B follow-up (drop tokio `time` feature on wasm32 + refactor the
+# signal scheduler around `wasm-bindgen-futures::JsFuture` timeouts).
+wasm = [
+    "dep:wasm-bindgen",
+    "dep:serde-wasm-bindgen",
+    "dep:console_error_panic_hook",
+    "dep:instant",
+]
+
+[dependencies]
+async-trait = "0.1"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# Shared (target-agnostic) tokio feature set. `rt-multi-thread` is added only
+# on non-wasm32 targets below — tokio rejects that feature on wasm32 with a
+# compile_error!. Native `ffi.rs` (cgo + PyO3) still gets the multi-threaded
+# runtime via the non-wasm32 target table.
+tokio = { version = "1", features = ["sync", "rt", "time", "macros"] }
+wasm-bindgen = { version = "0.2", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+# `Instant` polyfill: re-exports `std::time::Instant` on native targets, and
+# on `wasm32-unknown-unknown` swaps in a `performance.now()`-backed impl via
+# wasm-bindgen so `pipeline.rs`'s `Instant::now()` no longer panics with
+# "time not implemented on this platform". Gated behind the `wasm` feature
+# (only pulled in for wasm builds; native FFI consumers keep `std::time`).
+instant = { version = "0.1", features = ["wasm-bindgen"], optional = true }
+
+# Non-wasm builds (host targets: cgo + PyO3 surfaces) layer on the
+# multi-threaded runtime that `ffi.rs` calls `tokio::runtime::Runtime::new()`
+# against. Cargo unions features across this section and `[dependencies]`.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+[build-dependencies]
+cbindgen = "0.27"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tokio = { version = "1", features = ["full"] }
+
+[[bench]]
+name = "core_benchmarks"
+harness = false

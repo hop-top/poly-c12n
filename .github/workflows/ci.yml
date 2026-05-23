@@ -1,0 +1,243 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  rust:
+    name: Rust core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: clippy (core)
+        run: cargo clippy -p hop-top-c12n-core -- -D warnings
+      - name: clippy (rs SDK)
+        run: cargo clippy -p hop-top-c12n -- -D warnings
+      - name: test (core)
+        run: cargo test -p hop-top-c12n-core
+      - name: test (rs SDK)
+        run: cargo test -p hop-top-c12n
+      - name: build cdylib
+        run: cargo build -p hop-top-c12n-core --release
+      - name: upload libc12n_core
+        uses: actions/upload-artifact@v4
+        with:
+          name: libc12n_core-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            target/release/libc12n_core.so
+            target/release/libc12n_core.dylib
+            target/release/c12n_core.dll
+            target/release/libc12n_core.dll
+          if-no-files-found: ignore
+
+  go-stub:
+    name: Go (stub, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    permissions:
+      contents: read
+    env:
+      GOPRIVATE: "hop.top/*,github.com/hop-top/*"
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure private modules
+        shell: bash
+        env:
+          TOKEN: ${{ secrets.GH_PAT || github.token }}
+        run: |
+          git config --global url."https://${TOKEN}@github.com/hop-top".insteadOf "https://github.com/hop-top"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go/go.mod
+      - name: gofmt
+        if: runner.os != 'Windows'
+        working-directory: go
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "gofmt needed:"; gofmt -l .; exit 1
+          fi
+      - name: vet
+        working-directory: go
+        run: go vet ./...
+      - name: test
+        working-directory: go
+        run: go test -race -count=1 ./...
+      - name: build CLI
+        working-directory: go
+        run: go build -o bin/c12n ./cmd/c12n
+
+  go-cgo:
+    name: Go (cgo, ${{ matrix.os }})
+    needs: rust
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    permissions:
+      contents: read
+    env:
+      GOPRIVATE: "hop.top/*,github.com/hop-top/*"
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure private modules
+        shell: bash
+        env:
+          TOKEN: ${{ secrets.GH_PAT || github.token }}
+        run: |
+          git config --global url."https://${TOKEN}@github.com/hop-top".insteadOf "https://github.com/hop-top"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go/go.mod
+      - name: Install MinGW (Windows)
+        if: runner.os == 'Windows'
+        uses: egor-tensin/setup-mingw@v2
+        with:
+          platform: x64
+      - uses: actions/download-artifact@v4
+        with:
+          name: libc12n_core-${{ runner.os }}-${{ runner.arch }}
+          path: target/release/
+      - name: test (unix)
+        if: runner.os != 'Windows'
+        working-directory: go
+        env:
+          CGO_LDFLAGS: "-L${{ github.workspace }}/target/release"
+          LD_LIBRARY_PATH: "${{ github.workspace }}/target/release"
+          DYLD_LIBRARY_PATH: "${{ github.workspace }}/target/release"
+        run: go test -race -count=1 ./...
+      - name: test (windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        working-directory: go
+        env:
+          CGO_LDFLAGS: "-L${{ github.workspace }}/target/release"
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          # Ensure the DLL is on PATH so the loader can find it at test time.
+          export PATH="$WORKSPACE/target/release:$PATH"
+          go test -race -count=1 ./...
+
+  python:
+    name: Python bindings (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: install deps
+        run: pip install pytest
+      - name: test
+        shell: bash
+        env:
+          PYTHONPATH: python
+        run: |
+          cd py
+          pytest -q
+
+  ts-bindings:
+    name: TS bindings (${{ matrix.os }})
+    if: hashFiles('ts/package.json') != ''
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: install wasm-pack
+        shell: bash
+        run: |
+          # Use the upstream installer on posix; cargo install on Windows.
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cargo install wasm-pack --locked
+          else
+            curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+          fi
+      - name: wasm-pack build
+        shell: bash
+        working-directory: ts
+        run: wasm-pack build --target bundler --release
+      - name: install JS deps
+        shell: bash
+        working-directory: ts
+        run: pnpm install --frozen-lockfile
+      - name: vitest
+        shell: bash
+        working-directory: ts
+        run: pnpm vitest run
+
+  php-bindings:
+    name: PHP bindings (PHP ${{ matrix.php }}, ${{ matrix.os }})
+    if: hashFiles('php/composer.json') != ''
+    needs: rust
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        php: ["8.1", "8.2", "8.3"]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: ffi
+          ini-values: ffi.enable=true
+          coverage: none
+      - uses: actions/download-artifact@v4
+        with:
+          name: libc12n_core-${{ runner.os }}-${{ runner.arch }}
+          path: php/runtime/lib/
+      - name: composer install
+        working-directory: php
+        run: composer install --no-interaction --prefer-dist
+      - name: phpunit
+        working-directory: php
+        env:
+          C12N_CORE_LIB_PATH: ${{ github.workspace }}/php/runtime/lib
+        run: vendor/bin/phpunit

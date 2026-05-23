@@ -1,0 +1,44 @@
+{
+  "name": "hop-top/c12n",
+  "description": "LLM request classification engine — PHP FFI bindings over the Rust core",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": "^8.3",
+    "ext-ffi": "*",
+    "hop-top/kit": "^0.4"
+  },
+  "require-dev": {
+    "composer/composer": "^2.0",
+    "phpunit/phpunit": "^11.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "HopTop\\C12n\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "HopTop\\C12n\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "post-install-cmd": [
+      "HopTop\\C12n\\Installer::download"
+    ],
+    "post-update-cmd": [
+      "HopTop\\C12n\\Installer::download"
+    ],
+    "test": "phpunit"
+  },
+  "extra": {
+    "c12n-core": {
+      "version": "0.1.0-alpha.0",
+      "release-url-template": "https://github.com/hop-top/poly-c12n/releases/download/{tag}/libc12n_core-{os}-{arch}.tar.gz"
+    }
+  },
+  "config": {
+    "sort-packages": true,
+    "optimize-autoloader": true
+  }
+}
