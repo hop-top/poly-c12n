@@ -271,10 +271,13 @@ on the same cdylib. Deferred to T-0153 once we have adoption signal.
   `~/.composer/cache/`. Recommended: vendor-relative for deploy-archive
   self-containment; CI can opt into global for cache reuse. Final
   implementation choice in T-0143.
-- **Release-asset manifest hosting** — SHA256 manifest needs a stable URL.
-  Likely `https://github.com/hop-top/c12n/releases/download/<tag>/manifest.json`
-  alongside the tarballs. Final shape in T-0141 (post-install script
-  implementer's call). Open implementation question for wave 2.
+- **Release-asset manifest hosting** — SHA256 manifest published at
+  `https://github.com/hop-top/poly-c12n/releases/download/c12n-core/v<version>/manifest.json`
+  alongside the tarballs, generated from goreleaser's `dist/checksums.txt`
+  by `tools/release-manifest.sh`. Formalized in §"Release-asset
+  `manifest.json` contract" below (T-0184). The hop-top/.github reusable
+  goreleaser workflow will absorb the conversion step as a separate
+  follow-up so every FFI consumer in the fleet gets a manifest for free.
 - **kit-php experimental status** — kit-php is at
   `0.4.0-experimental.1`. c12n-php pinning `^0.4` accepts forward-compat
   churn until kit-php stabilises. Acceptable for v0-alpha; revisit at
@@ -316,6 +319,66 @@ php/
 └── runtime/                   # populated by post-install (gitignored)
     └── lib/libc12n_core.{so,dylib,dll}
 ```
+
+### Release-asset `manifest.json` contract
+
+The Installer's SHA256 verification step depends on a sibling `manifest.json`
+published at the same GitHub release as the cdylib tarballs. This is the
+canonical contract for every FFI-driven hop-top consumer; sibling-language
+bindings (cgo, PyO3, wasm-bindgen) reuse the same convention when they need
+post-install asset verification.
+
+- **Filename**: `manifest.json` — committed as an additional release asset
+  alongside the per-platform `libc12n_core-<os>-<arch>.tar.gz` tarballs.
+- **Tag**: `c12n-core/v<version>` (linked-versions per §5, e.g.
+  `c12n-core/v0.1.0-alpha.0`). The c12n-core slice of the monorepo tags
+  independently so each FFI consumer pins against the cdylib version,
+  not the umbrella release.
+- **URL template**:
+  `https://github.com/hop-top/poly-c12n/releases/download/c12n-core/v<version>/manifest.json`.
+  Hardcoded in `php/src/Installer.php::MANIFEST_URL_TEMPLATE`; mirrored by
+  any future binding that needs verification.
+- **Shape**: a flat JSON object mapping the asset filename to its SHA256
+  digest. Two value forms are accepted; producers SHOULD emit the
+  prefixed form:
+
+  ```json
+  {
+    "libc12n_core-linux-x86_64.tar.gz":  "sha256:<64-hex>",
+    "libc12n_core-linux-aarch64.tar.gz": "sha256:<64-hex>",
+    "libc12n_core-macos-x86_64.tar.gz":  "sha256:<64-hex>",
+    "libc12n_core-macos-aarch64.tar.gz": "sha256:<64-hex>",
+    "libc12n_core-windows-x86_64.tar.gz":"sha256:<64-hex>"
+  }
+  ```
+
+  The Installer also accepts bare `"<64-hex>"` values without the
+  `sha256:` prefix, for tolerance against producers that emit the
+  shorter form (e.g. hand-edited test fixtures). New producers MUST use
+  the prefixed form so the digest algorithm is self-describing — a
+  future SHA-512 migration can coexist with SHA-256 entries on the same
+  manifest without breaking older consumers.
+- **Generation**: goreleaser emits `dist/checksums.txt` natively (one
+  `<hex>  <filename>` line per asset). A post-process step converts
+  that file into `dist/manifest.json` before the release-asset upload
+  step runs. The conversion is implemented by `tools/release-manifest.sh`
+  (POSIX shell, ~30 LOC) at the repo root:
+
+  ```sh
+  ./tools/release-manifest.sh dist/checksums.txt > dist/manifest.json
+  ```
+
+  Rejected alternative: a goreleaser custom template emitting the
+  manifest via `extra_files`. The shell script is simpler to debug,
+  has no goreleaser-version coupling, and can be invoked from any
+  release pipeline (not just goreleaser).
+- **Workflow wiring**: c12n's `.github/workflows/publish.yml` delegates
+  release publishing to the reusable goreleaser workflow at
+  `hop-top/.github`. A follow-up there will teach that reusable
+  workflow to run `tools/release-manifest.sh` after `goreleaser release`
+  and before the asset-upload step, so the manifest ships alongside the
+  tarballs without per-repo wiring. Until then, c12n's publish.yml is
+  unchanged and the manifest is generated on demand by release engineers.
 
 ### CI matrix (v0)
 
