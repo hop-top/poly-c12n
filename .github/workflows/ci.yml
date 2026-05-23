@@ -226,6 +226,12 @@ jobs:
         php: ["8.4"]
     permissions:
       contents: read
+    # Hoisted to job-level so the Installer's post-install-cmd hook
+    # (which runs during `composer install`) sees it too — without this,
+    # the Installer attempts to download libc12n_core from a non-existent
+    # GitHub release tag.
+    env:
+      C12N_CORE_LIB_PATH: ${{ github.workspace }}/php/runtime/lib
     steps:
       - uses: actions/checkout@v4
       - name: setup PHP
@@ -244,6 +250,4 @@ jobs:
         run: composer install --no-interaction --prefer-dist
       - name: phpunit
         working-directory: php
-        env:
-          C12N_CORE_LIB_PATH: ${{ github.workspace }}/php/runtime/lib
         run: vendor/bin/phpunit
