@@ -178,8 +178,6 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ts
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -195,10 +193,12 @@ jobs:
           else
             curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
           fi
-      - name: wasm-pack build
+      - name: wasm-pack build (bundler target)
         shell: bash
-        working-directory: ts
-        run: wasm-pack build --target bundler --release
+        run: wasm-pack build core --target bundler --release --features wasm --out-dir ../ts/pkg/bundler --out-name c12n_core
+      - name: wasm-pack build (nodejs target)
+        shell: bash
+        run: wasm-pack build core --target nodejs --release --features wasm --out-dir ../ts/pkg/nodejs --out-name c12n_core
       - name: install JS deps
         shell: bash
         working-directory: ts
