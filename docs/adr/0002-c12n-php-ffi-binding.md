@@ -185,11 +185,11 @@ fails `composer install` against current `hop-top/kit`.
 
 The c12n-php `composer.json` also sets `"minimum-stability": "alpha"` +
 `"prefer-stable": true` at the root. kit-php releases on the alpha channel
-and its own transitive `hop-top/uri ^0.2.0@alpha` constraint pulls another
+and its own transitive `hop-top/cite ^0.1.0` constraint pulls another
 alpha dependency in. Without the global stability allowance, composer's
-default `minimum-stability: stable` filters every available kit / uri
+default `minimum-stability: stable` filters every available kit / cite
 version out. `prefer-stable: true` ensures stable releases take precedence
-the moment kit / uri publish stable tags.
+the moment kit / cite publish stable tags.
 
 #### Why follow kit-php's floor
 
