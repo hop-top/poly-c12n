@@ -50,7 +50,7 @@ Seven linked decisions, all locked 2026-05-18 in `plan.md` and ratified here:
 3. **Windows: shipped at v0.1.0-alpha.0** — `libc12n_core.dll` ships in the
    post-install download bucket so PHP-on-Windows users get a working artifact
    from day one. Windows PHPUnit integration is deferred to a follow-up
-   (T-0153); v0 CI runs PHPUnit on `ubuntu-latest` + `macos-latest` only.
+   matrix; v0 CI runs PHPUnit on `ubuntu-latest` + `macos-latest` only.
 4. **Native lib distribution: Composer post-install script** — downloads
    `libc12n_core-<version>-<os>-<arch>.tar.gz` from the matching c12n GitHub
    release, SHA256-verified against a release-asset manifest, into a
@@ -60,12 +60,12 @@ Seven linked decisions, all locked 2026-05-18 in `plan.md` and ratified here:
    `c12n-ts`. All bump together; `release-please-config.json`'s
    `linked-versions` group includes c12n-php.
 6. **PHP version floor: 8.4 in v0.0.0-alpha.*** — composer constraint
-   `"php": "^8.4"`. The original decision was 8.1+ (FFI stable from 8.1);
-   T-0185 bumped to 8.3 to align with kit-php's then-current floor; T-0194
-   bumps to 8.4 because kit-php v0.4.0-alpha.2 raised its own floor to
-   `^8.4`. c12n-php's `hop-top/kit: ^0.4@alpha` dependency drags this
-   constraint in transitively. Floor to revisit only if kit-php broadens
-   its own range.
+   `"php": "^8.4"`. Original decision was 8.1+ (FFI stable from 8.1); later
+   bumped to 8.3 to align with kit-php's then-current floor; bumped again
+   to 8.4 in this revision because kit-php v0.4.0-alpha.2 raised its own
+   floor to `^8.4`. c12n-php's `hop-top/kit: ^0.4@alpha` dependency drags
+   this constraint in transitively. Floor to revisit only if kit-php
+   broadens its own range.
 7. **Kit-php dependency: required** — c12n-php depends on `hop-top/kit`
    (Composer) for logging, event-bus participation, and CLI surface. Mirrors
    c12n-py and c12n-ts kit adoption.
@@ -111,7 +111,7 @@ incremental build work. PHP-on-Windows is a non-trivial slice of the userbase
 The compromise: ship the cdylib day one, defer the *PHPUnit-on-windows*
 matrix entry. Adding `windows-latest` to the CI matrix for one job — when
 Rust + Go already cover Windows cdylib correctness — would add ~5 minutes to
-every PR for a marginal coverage gain. Track T-0153 (post-v0) folds Windows
+every PR for a marginal coverage gain. A post-v0 follow-up folds Windows
 PHPUnit in once we have signal on Windows-PHP-FFI adoption.
 
 ### 4. Composer post-install — dominant cross-language pattern
@@ -158,7 +158,7 @@ self-contained. The alternative — `~/.composer/cache/c12n/` — survives
 `composer install --no-dev` rebuilds but breaks containerised deploys that
 mount only the project's `vendor/`. The composer-relative path is the
 recommended default; the global cache stays an option for CI-runner reuse.
-Final decision deferred to T-0143 (the post-install script implementer).
+Final decision deferred to the post-install script implementer.
 
 ### 5. Linked versions — single release-please group
 
@@ -177,19 +177,21 @@ a red flag (forward-compat breaks at PHP minor releases; unclear long-term
 support). PHP 7.4 reached EOL in November 2022; PHP 8.0 in November 2023.
 
 The original ADR decision pinned the floor at **8.1** — the minimum that gets
-us off experimental FFI APIs. T-0185 then bumped it to **8.3** when kit-php
-moved to that floor. T-0194 (this revision) bumps again to **8.4** because
-kit-php v0.4.0-alpha.2 raised its own floor to `^8.4`. Composer's platform-req
+us off experimental FFI APIs. Later bumped to **8.3** when kit-php moved to
+that floor. This revision bumps again to **8.4** because kit-php
+v0.4.0-alpha.2 raised its own floor to `^8.4`. Composer's platform-req
 resolver enforces this transitively, so any c12n-php constraint below 8.4
 fails `composer install` against current `hop-top/kit`.
 
 The c12n-php `composer.json` also sets `"minimum-stability": "alpha"` +
-`"prefer-stable": true` at the root. kit-php releases on the alpha channel
-and its own transitive `hop-top/cite ^0.1.0` constraint pulls another
-alpha dependency in. Without the global stability allowance, composer's
-default `minimum-stability: stable` filters every available kit / cite
-version out. `prefer-stable: true` ensures stable releases take precedence
-the moment kit / cite publish stable tags.
+`"prefer-stable": true` at the root. The alpha channel allowance is required
+specifically by `hop-top/kit`, which is still pre-1.0 and ships on the alpha
+channel. `hop-top/cite` (kit-php's transitive dep, pulled via `^0.1.0`) is
+already published at stable tags on Packagist (`v0.1.0`, `v0.2.0`) and would
+resolve under the default `minimum-stability: stable`. Without the global
+alpha allowance for kit, composer's default filters every available kit
+version out and `composer install` fails. `prefer-stable: true` ensures
+stable releases take precedence the moment kit publishes stable tags.
 
 #### Why follow kit-php's floor
 
@@ -255,7 +257,7 @@ GH release asset. Excluding Windows users would be gratuitous.
 
 Add `windows-latest` to the v0 PHPUnit matrix. Rejected: ~5 minutes added
 to every PR for a coverage gain already covered by Rust + Go Windows tests
-on the same cdylib. Deferred to T-0153 once we have adoption signal.
+on the same cdylib. Deferred to a post-v0 follow-up once we have adoption signal.
 
 ## Consequences
 
@@ -290,7 +292,7 @@ on the same cdylib. Deferred to T-0153 once we have adoption signal.
 - **Windows PHPUnit deferred** — actual binding correctness on Windows is
   un-tested via PHP at v0. Mitigated by Rust + Go cgo Windows jobs
   exercising the same cdylib. Residual risk: PHP FFI / Windows linker
-  interaction-specific bugs. Tracked in T-0153.
+  interaction-specific bugs. Tracked as a post-v0 follow-up.
 - **PHP 8.4 floor excludes older PHP** — users on PHP 7.4 / 8.0 / 8.1 /
   8.2 / 8.3 cannot install c12n-php at v0.0.0-alpha.*. 7.4 / 8.0 are EOL
   and had experimental FFI; 8.1 / 8.2 / 8.3 are stable but excluded
@@ -302,12 +304,12 @@ on the same cdylib. Deferred to T-0153 once we have adoption signal.
 - **Cache dir location** — composer-relative `vendor/` cache vs global
   `~/.composer/cache/`. Recommended: vendor-relative for deploy-archive
   self-containment; CI can opt into global for cache reuse. Final
-  implementation choice in T-0143.
+  implementation choice deferred to the post-install script implementer.
 - **Release-asset manifest hosting** — SHA256 manifest published at
   `https://github.com/hop-top/poly-c12n/releases/download/c12n-core/v<version>/manifest.json`
   alongside the tarballs, generated from goreleaser's `dist/checksums.txt`
   by `tools/release-manifest.sh`. Formalized in §"Release-asset
-  `manifest.json` contract" below (T-0184). The hop-top/.github reusable
+  `manifest.json` contract" below. The hop-top/.github reusable
   goreleaser workflow will absorb the conversion step as a separate
   follow-up so every FFI consumer in the fleet gets a manifest for free.
 - **kit-php experimental status** — kit-php is at
@@ -415,11 +417,11 @@ post-install asset verification.
 ### CI matrix (v0)
 
 PHP 8.4 × {`ubuntu-latest`, `macos-latest`}. `windows-latest` deferred to
-T-0153. cdylib artifact downloaded from the Rust job (same artifact-upload
-pattern c12n-go uses). Matrix originally listed 8.1 / 8.2 / 8.3 (per the
-original 8.1+ floor); 8.1 / 8.2 dropped in T-0185 once kit-php's `^8.3`
-floor entered the dependency graph; 8.3 dropped in T-0194 when kit-php
-v0.4.0-alpha.2 raised its own floor to `^8.4`.
+a post-v0 follow-up. cdylib artifact downloaded from the Rust job (same
+artifact-upload pattern c12n-go uses). Matrix originally listed 8.1 / 8.2
+/ 8.3 (per the original 8.1+ floor); 8.1 / 8.2 dropped once kit-php's
+`^8.3` floor entered the dependency graph; 8.3 dropped in this revision
+when kit-php v0.4.0-alpha.2 raised its own floor to `^8.4`.
 
 ## References
 
@@ -430,5 +432,5 @@ v0.4.0-alpha.2 raised its own floor to `^8.4`.
   manifest shape, copied for c12n-php structure.
 - ADR-0001 — c12n-ts WASM binding (sibling decision, same fleet context).
 - `release-please-config.json` — linked-versions group definition.
-- T-0132 (this ADR), T-0136..T-0150, T-0152..T-0153 — implementation tasks
-  gated on this document.
+- Implementation tasks gated on this document are tracked in tlc (out of
+  scope for this ADR).
