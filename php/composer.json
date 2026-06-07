@@ -8,7 +8,7 @@
   "require": {
     "php": "^8.4",
     "ext-ffi": "*",
-    "hop-top/kit": "^0.4"
+    "hop-top/kit": "^0.5"
   },
   "require-dev": {
     "composer/composer": "^2.0",
