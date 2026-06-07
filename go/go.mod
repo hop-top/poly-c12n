@@ -3,10 +3,10 @@ module hop.top/c12n
 go 1.26.1
 
 require (
-	github.com/mattn/go-isatty v0.0.21
+	github.com/mattn/go-isatty v0.0.22
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
-	hop.top/kit v0.4.0-alpha.2
+	hop.top/kit v0.5.0-alpha.0
 	hop.top/xrr v0.1.0-alpha.4
 )
 
@@ -15,12 +15,14 @@ require (
 	charm.land/glamour/v2 v2.0.0 // indirect
 	charm.land/lipgloss/v2 v2.0.3 // indirect
 	charm.land/log/v2 v2.0.0 // indirect
+	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/alecthomas/chroma/v2 v2.23.1 // indirect
 	github.com/apple/pkl-go v0.13.2 // indirect
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
+	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260413225345-5027f0c48455 // indirect
@@ -36,6 +38,7 @@ require (
 	github.com/danielgtaylor/huma/v2 v2.37.3 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/failsafe-go/failsafe-go v0.9.6 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-logfmt/logfmt v0.6.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
@@ -80,7 +83,7 @@ require (
 	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/tools v0.44.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	hop.top/uri v0.2.0-alpha.0 // indirect
+	hop.top/cite v0.1.0 // indirect
 	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
