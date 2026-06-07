@@ -1,6 +1,6 @@
 [package]
 name = "hop-top-c12n"
-version = "0.0.0-alpha.0"
+version = "0.0.0-alpha.1"
 edition = "2021"
 description = "Idiomatic Rust SDK for c12n — LLM request classification engine"
 license = "MIT"
