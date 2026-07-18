@@ -1,0 +1,76 @@
+module c12n.Config
+
+/// Maximum number of concurrent signal evaluations
+max_concurrency: Int = 8
+
+/// Per-signal evaluation timeout in milliseconds
+timeout_ms: Int = 5000
+
+/// Enable keyword signal
+keyword_enabled: Boolean = true
+
+/// Keyword matching strategy
+keyword_strategy: "regex"|"bm25"|"trigram"|"fuzzy" = "regex"
+
+/// Default keyword match threshold
+keyword_threshold: Float = 0.5
+
+/// Enable embedding signal
+embedding_enabled: Boolean = false
+
+/// Path to embedding model
+embedding_model_path: String?
+
+/// Embedding match threshold
+embedding_threshold: Float = 0.7
+
+/// Enable domain classification signal
+domain_enabled: Boolean = false
+
+/// Path to domain classification model
+domain_model_path: String?
+
+/// Enable jailbreak detection
+safety_jailbreak_enabled: Boolean = true
+
+/// Path to jailbreak detection model
+safety_jailbreak_model_path: String?
+
+/// Enable PII detection
+safety_pii_enabled: Boolean = true
+
+/// Enable toxicity detection
+safety_toxicity_enabled: Boolean = false
+
+/// Toxicity detection threshold
+safety_toxicity_threshold: Float = 0.7
+
+/// Enable context/token counting
+context_enabled: Boolean = true
+
+/// Estimated output/input token ratio
+context_output_ratio: Float = 1.5
+
+/// Enable language detection
+language_enabled: Boolean = false
+
+/// Enable complexity classification
+complexity_enabled: Boolean = false
+
+/// Path to complexity model
+complexity_model_path: String?
+
+/// Complexity margin for confident classification
+complexity_margin: Float = 0.2
+
+/// Enable output format detection
+format_enabled: Boolean = true
+
+/// Enable code content detection
+code_enabled: Boolean = true
+
+/// Enable tool-calling detection
+toolcall_enabled: Boolean = true
+
+/// Enable cost estimation
+cost_enabled: Boolean = true
