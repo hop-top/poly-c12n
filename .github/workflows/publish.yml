@@ -55,6 +55,9 @@ jobs:
           package: "@hop-top/c12n"
           mirror: hop-top/c12n-ts
           node-version: '22'
+          build-command: >-
+            curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh &&
+            pnpm build
         c12n-php:
           dir: php
           ecosystem: php
