@@ -49,8 +49,9 @@ jobs:
           python-version: '3.11'
           test-command: pip install pytest pytest-asyncio pyyaml && PYTHONPATH=python pytest -q
           build-command: >-
-            pip install maturin &&
-            maturin build --release --compatibility manylinux2014 --out dist
+            docker run --rm -v "$(git rev-parse --show-toplevel)":/io -w /io/py
+            ghcr.io/pyo3/maturin build --release --compatibility manylinux2014 --out dist
+            --interpreter python3.11
           pypi-auth: token
         c12n-ts:
           dir: ts
