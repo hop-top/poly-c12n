@@ -1,8 +1,8 @@
-//go:build cgo && integration
+//go:build c12n_native && integration
 
-// Integration tests require the c12n-core cdylib and cgo.
+// Integration tests require the c12n-core cdylib and the native engine.
 // Run with:
-//   CGO_ENABLED=1 go test -tags integration -run TestIntegration ./...
+//   go test -tags "c12n_native integration" -run TestIntegration ./...
 
 package c12n
 

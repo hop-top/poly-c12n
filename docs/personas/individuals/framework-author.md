@@ -15,13 +15,13 @@ classification to c12n.
 - API stability for downstream consumers.
 - Documentation overhead: must explain c12n concepts in framework's
   own vocabulary.
-- Must work in CGO_ENABLED=0 mode for framework users who don't
+- Must work in the default stub build (no `c12n_native` tag) for framework users who don't
   want native deps.
 
 ## What they get from c12n
 
 - `c12n_stub.go` lets the framework compile without Rust core —
-  classifier returns `errNoCgo` until the user wires it.
+  classifier returns `errNativeDisabled` until the user wires it.
 - `Pipeline` interface is small: `Evaluate(ctx) (PipelineResult,
   error)` + `Close()`.
 - `ClassificationContext` is a struct, not a builder — clean for

@@ -1,7 +1,8 @@
-//go:build cgo
+//go:build c12n_native
 
 package c12n
 
+// Opt-in native engine: build with -tags c12n_native (cgo required).
 // Requires libc12n_core built from the Rust c12n-core engine.
 // Build: cd <repo-root> && cargo build (produces target/debug/libc12n_core.{so,dylib,dll})
 // The Rust workspace lives at <repo-root> (one level above this go/ dir);

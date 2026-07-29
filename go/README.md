@@ -31,26 +31,30 @@ Requires Go 1.26+.
 
 ## Build modes
 
-The bindings ship in two flavours, selected by `CGO_ENABLED`:
+The bindings ship in two flavours, selected by the opt-in `c12n_native`
+build tag:
 
-| Mode | `CGO_ENABLED` | Behaviour |
-|------|---------------|-----------|
-| **stub** | `0` | Pure Go. Types, config loading (`Config`, `LoadConfig`), result parsing, and the CLI all work. `NewPipeline` and `Pipeline.Evaluate` return `errNoCgo` — no real classification. |
-| **cgo**  | `1` | Links `libc12n_core.{so,dylib,dll}` from the Rust engine and performs real classification. |
+| Mode | Build tag | Behaviour |
+|------|-----------|-----------|
+| **stub** (default) | _(none)_ | Pure Go, regardless of `CGO_ENABLED`. Types, config loading (`Config`, `LoadConfig`), result parsing, and the CLI all work. `NewPipeline` and `Pipeline.Evaluate` return an error — no real classification. |
+| **native** | `c12n_native` | Links `libc12n_core.{so,dylib,dll}` from the Rust engine via cgo and performs real classification. |
 
-The stub mode lets downstream code depend on the package, build config
-tooling, and run tests without the native library present. Enable cgo when
-you need actual scoring:
+The stub is the default even when cgo is enabled, so module-proxy
+consumers (including projects that need cgo for other dependencies, e.g.
+sqlite) build without the Rust library present. Opt in to the native
+engine when you need actual scoring:
 
 ```bash
-# real classification — requires libc12n_core on the linker path
-CGO_ENABLED=1 go build ./...
+# build the Rust cdylib first (produces target/debug/libc12n_core.*)
+cargo build
+
+# real classification — requires cgo and libc12n_core on the linker path
+go build -tags c12n_native ./...
 ```
 
-The cgo build links against `libc12n_core` via
-`-L${SRCDIR}/../target/debug -lc12n_core`. Build the cdylib from the Rust
-workspace first (`cargo build` at the repo root produces
-`target/debug/libc12n_core.*`).
+The native build links against `libc12n_core` via
+`-L${SRCDIR}/../target/debug -lc12n_core` and requires `CGO_ENABLED=1`
+(the default on most toolchains).
 
 ## Quickstart
 
@@ -66,8 +70,8 @@ import (
 )
 
 func main() {
-	// Configure and construct the pipeline. Requires CGO_ENABLED=1;
-	// under the stub build NewPipeline returns an error.
+	// Configure and construct the pipeline. Requires -tags c12n_native;
+	// under the default stub build NewPipeline returns an error.
 	p, err := c12n.NewPipeline(c12n.PipelineConfig{
 		MaxConcurrency: 8,
 		Timeout:        5 * time.Second,

@@ -65,7 +65,7 @@ func TestRecordablePipeline_RecordReplay(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 
-	// The stub pipeline returns errNoCgo, so record will capture an error.
+	// The stub pipeline returns errNativeDisabled, so record will capture an error.
 	// We verify the record/replay round-trip mechanics work.
 	pipeline := &Pipeline{}
 

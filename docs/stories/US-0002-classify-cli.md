@@ -53,7 +53,7 @@ CGO_ENABLED=0 go test -run TestE2EClassifyFormatFlag ./cmd/c12n
 renders via `kit/output` (JSON or table).
 
 In stub mode, the command surface (flags, help, completion) is
-fully wired; `Evaluate` errors with `errNoCgo` if you try to actually
+fully wired; `Evaluate` errors with `errNativeDisabled` if you try to actually
 classify.
 
 ## Tests

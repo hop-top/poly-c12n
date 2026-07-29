@@ -41,7 +41,7 @@ poly-c12n/
 │   ├── src/wasm.rs         #[wasm_bindgen] surface (for c12n-ts)
 │   ├── src/signals/        15 signal implementations
 │   └── include/libc12n_core.h   cbindgen-generated header (PHP FFI consumes)
-├── go/           Go bindings (hop.top/c12n) — cgo + stub modes
+├── go/           Go bindings (hop.top/c12n) — stub + opt-in native (c12n_native) modes
 │   ├── *.go                Pipeline, ClassificationContext, Result
 │   └── cmd/c12n/           CLI binary
 ├── rs/           Rust SDK (hop-top-c12n) — ergonomic layer over core
@@ -61,10 +61,11 @@ go get hop.top/c12n@latest
 ```
 
 Two build modes:
-- **stub** (`CGO_ENABLED=0`): types + config + CLI work; `Pipeline.Evaluate`
-  returns `errNoCgo`.
-- **cgo** (`CGO_ENABLED=1`): links `libc12n_core.{so,dylib,dll}` from the
-  Rust engine. Real classification.
+- **stub** (default, even with cgo enabled): types + config + CLI work;
+  `Pipeline.Evaluate` returns an error.
+- **native** (`-tags c12n_native`, requires cgo + `cargo build` first):
+  links `libc12n_core.{so,dylib,dll}` from the Rust engine. Real
+  classification.
 
 ### Rust (SDK)
 

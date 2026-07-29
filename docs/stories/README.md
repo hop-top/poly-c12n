@@ -17,15 +17,17 @@ Tool-author user stories. Each story is one page, intent-driven shape:
 UCP: tool authors. See [personas/](../personas/README.md) for the five
 roles these stories serve.
 
-## CGO note
+## Build-mode note
 
-c12n ships two Go build modes:
+c12n ships two Go build modes, selected by the `c12n_native` build tag:
 
-- **`CGO_ENABLED=0`** (stub): pipeline + config + parsing + CLI all
-  work; `Pipeline.Evaluate` returns `errNoCgo`. Useful for tooling
-  that consumes c12n types without needing the engine.
-- **`CGO_ENABLED=1`** (real): links `libc12n_core.{so,dylib}` from
-  the Rust core (`c12n-core/`). Real classification.
+- **default** (stub, regardless of `CGO_ENABLED`): pipeline + config +
+  parsing + CLI all work; `Pipeline.Evaluate` returns
+  `errNativeDisabled`. Useful for tooling that consumes c12n types
+  without needing the engine.
+- **`-tags c12n_native`** (real, requires cgo): links
+  `libc12n_core.{so,dylib}` from the Rust core (`c12n-core/`). Real
+  classification.
 
 Both modes are exercised in CI. Stories below note the mode where
 relevant; otherwise they run in both.

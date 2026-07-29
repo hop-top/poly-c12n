@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 
 	"github.com/spf13/cobra"
 
@@ -120,29 +119,19 @@ func doctorCmd() *cobra.Command {
 				}
 			})
 
-			// Check 3: CGO available.
+			// Check 3: native engine linked into this binary.
 			doc.Add(func() uxp.Check {
-				out, err := exec.Command("go", "env", "CGO_ENABLED").Output()
-				if err != nil {
+				if nativeBuild {
 					return uxp.Check{
-						Name:    "cgo",
-						Status:  uxp.StatusWarn,
-						Message: "could not determine CGO status",
-						Detail:  err.Error(),
-					}
-				}
-				val := string(out)
-				if len(val) > 0 && val[0] == '1' {
-					return uxp.Check{
-						Name:    "cgo",
+						Name:    "native-engine",
 						Status:  uxp.StatusOK,
-						Message: "CGO_ENABLED=1",
+						Message: "built with -tags c12n_native (native engine linked)",
 					}
 				}
 				return uxp.Check{
-					Name:    "cgo",
+					Name:    "native-engine",
 					Status:  uxp.StatusWarn,
-					Message: "CGO_ENABLED=0 (native signals unavailable)",
+					Message: "stub build (native signals unavailable; rebuild with -tags c12n_native)",
 				}
 			})
 

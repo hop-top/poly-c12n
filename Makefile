@@ -17,14 +17,14 @@ test-rust:
 test-rs-sdk:
 	cargo test -p hop-top-c12n
 
-# Go bindings (go/) — cgo path links libc12n_core
+# Go bindings (go/) — native path (-tags c12n_native) links libc12n_core
 build-go: build-rust
-	cd go && CGO_LDFLAGS="-L$$(pwd)/../target/debug" go build ./...
+	cd go && CGO_ENABLED=1 CGO_LDFLAGS="-L$$(pwd)/../target/debug" go build -tags c12n_native ./...
 
 test-go: build-rust
-	cd go && CGO_LDFLAGS="-L$$(pwd)/../target/debug" \
+	cd go && CGO_ENABLED=1 CGO_LDFLAGS="-L$$(pwd)/../target/debug" \
 	  DYLD_LIBRARY_PATH="$$(pwd)/../target/debug" \
-	  go test -race -count=1 ./...
+	  go test -tags c12n_native -race -count=1 ./...
 
 # Go stub path (no Rust required)
 test-go-stub:
