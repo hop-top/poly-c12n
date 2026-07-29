@@ -22,7 +22,7 @@ roles these stories serve.
 c12n ships two Go build modes:
 
 - **`CGO_ENABLED=0`** (stub): pipeline + config + parsing + CLI all
-  work; `Pipeline.Evaluate` returns `errNoCgo`. Useful for tooling
+  work; `Pipeline.Evaluate` returns `errNativeDisabled`. Useful for tooling
   that consumes c12n types without needing the engine.
 - **`CGO_ENABLED=1`** (real): links `libc12n_core.{so,dylib}` from
   the Rust core (`c12n-core/`). Real classification.

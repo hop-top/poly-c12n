@@ -34,7 +34,7 @@ if err != nil {
 defer pipeline.Close()
 ```
 
-In CGO_ENABLED=0 builds, `err` will be `errNoCgo` — that's expected
+In default (stub) builds, `err` will be `errNativeDisabled` — that's expected
 in v0.1.0-alpha.0. Code paths that depend only on construction +
 `Close()` (config validation, lifecycle plumbing) work either way.
 
@@ -55,7 +55,7 @@ CGO_ENABLED=0 go test -run TestIntegration_PipelineLifecycle ./...
   `kit/config`.
 
 `NewPipeline` returns the right impl per build tag (`c12n_cgo.go`
-for cgo, `c12n_stub.go` otherwise).
+with `-tags c12n_native`, `c12n_stub.go` otherwise).
 
 ## Tests
 

@@ -21,12 +21,12 @@ func TestE2E_DefaultConfigToPipeline(t *testing.T) {
 		t.Errorf("Timeout = %v, want 5s", pc.Timeout)
 	}
 
-	// Stub returns errNoCgo; the point is that the conversion path works.
+	// Stub returns errNativeDisabled; the point is that the conversion path works.
 	_, err := NewPipeline(pc)
 	if err == nil {
-		t.Skip("cgo pipeline available; stub path not exercised")
+		t.Skip("native pipeline available; stub path not exercised")
 	}
-	if err.Error() != "c12n: built without cgo support" {
+	if err.Error() != "c12n: native engine disabled (build with -tags c12n_native)" {
 		t.Errorf("unexpected error: %v", err)
 	}
 }

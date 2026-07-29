@@ -21,7 +21,7 @@ classification to c12n.
 ## What they get from c12n
 
 - `c12n_stub.go` lets the framework compile without Rust core —
-  classifier returns `errNoCgo` until the user wires it.
+  classifier returns `errNativeDisabled` until the user wires it.
 - `Pipeline` interface is small: `Evaluate(ctx) (PipelineResult,
   error)` + `Close()`.
 - `ClassificationContext` is a struct, not a builder — clean for
