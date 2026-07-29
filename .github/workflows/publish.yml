@@ -48,6 +48,9 @@ jobs:
           mirror: hop-top/c12n-py
           python-version: '3.11'
           test-command: pip install pytest pytest-asyncio pyyaml && PYTHONPATH=python pytest -q
+          build-command: >-
+            pip install maturin &&
+            maturin build --release --compatibility manylinux2014 --out dist
           pypi-auth: token
         c12n-ts:
           dir: ts
