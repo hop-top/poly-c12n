@@ -2,7 +2,9 @@ name: publish
 
 on:
   push:
-    tags: ['*/v*']
+    tags:
+      - '*/v*'
+      - '!c12n-poly/v*'
 
 jobs:
   publish:
@@ -45,7 +47,7 @@ jobs:
           package: hop-top-c12n
           mirror: hop-top/c12n-py
           python-version: '3.11'
-          test-command: pip install pytest && PYTHONPATH=python pytest -q
+          test-command: pip install pytest pytest-asyncio && PYTHONPATH=python pytest -q
           pypi-auth: token
         c12n-ts:
           dir: ts
