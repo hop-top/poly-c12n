@@ -25,7 +25,12 @@ export * from './index.js';
  * nodejs target loads the `.wasm` synchronously at module load.
  */
 export async function loadNodejs(): Promise<WasmModule> {
-  const mod = (await import(/* @vite-ignore */ '../pkg/nodejs/c12n_core.js')) as WasmModule;
+  // The nodejs wasm-pack target's `default` export is the raw module
+  // namespace object, not the bundler target's async init function —
+  // narrower than what WasmModule declares, so this cast goes via
+  // `unknown`. Only `Pipeline`/`setPanicHook` are used off the nodejs
+  // path; `default()` is never called here.
+  const mod = (await import(/* @vite-ignore */ '../pkg/nodejs/c12n_core.js')) as unknown as WasmModule;
   return mod;
 }
 
