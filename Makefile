@@ -19,10 +19,10 @@ test-rs-sdk:
 
 # Go bindings (go/) — native path (-tags c12n_native) links libc12n_core
 build-go: build-rust
-	cd go && CGO_LDFLAGS="-L$$(pwd)/../target/debug" go build -tags c12n_native ./...
+	cd go && CGO_ENABLED=1 CGO_LDFLAGS="-L$$(pwd)/../target/debug" go build -tags c12n_native ./...
 
 test-go: build-rust
-	cd go && CGO_LDFLAGS="-L$$(pwd)/../target/debug" \
+	cd go && CGO_ENABLED=1 CGO_LDFLAGS="-L$$(pwd)/../target/debug" \
 	  DYLD_LIBRARY_PATH="$$(pwd)/../target/debug" \
 	  go test -tags c12n_native -race -count=1 ./...
 
