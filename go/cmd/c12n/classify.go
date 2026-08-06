@@ -130,7 +130,7 @@ func resolveInput(args []string, filePath string, useStdin bool, r io.Reader) (s
 // filterBySignal returns a copy containing only matching signal types.
 func filterBySignal(r *c12n.PipelineResult, t c12n.SignalType) *c12n.PipelineResult {
 	out := &c12n.PipelineResult{
-		DurationNs: r.DurationNs,
+		DurationMs: r.DurationMs,
 		Errors:     r.Errors,
 	}
 	for _, s := range r.Results {
@@ -144,7 +144,7 @@ func filterBySignal(r *c12n.PipelineResult, t c12n.SignalType) *c12n.PipelineRes
 // filterByConfidence returns a copy containing only results above threshold.
 func filterByConfidence(r *c12n.PipelineResult, min float64) *c12n.PipelineResult {
 	out := &c12n.PipelineResult{
-		DurationNs: r.DurationNs,
+		DurationMs: r.DurationMs,
 		Errors:     r.Errors,
 	}
 	for _, s := range r.Results {

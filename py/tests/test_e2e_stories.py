@@ -55,7 +55,7 @@ SAMPLE_RESULTS = {
         },
     ],
     "errors": [],
-    "duration_ns": 2500000,
+    "duration_ms": 25,
 }
 
 
@@ -204,7 +204,7 @@ class TestAgentJSONConformance:
         parsed = json.loads(raw)
         assert "results" in parsed
         assert "errors" in parsed
-        assert "duration_ns" in parsed
+        assert "duration_ms" in parsed
         assert isinstance(parsed["results"], list)
 
     def test_signal_result_fields_typed(self):

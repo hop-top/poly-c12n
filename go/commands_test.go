@@ -67,7 +67,7 @@ func TestRenderResultJSON(t *testing.T) {
 		Results: []SignalResult{
 			{Name: "test", Type: SignalIntent, Confidence: 0.95, Labels: []string{"greeting"}},
 		},
-		DurationNs: 1000000,
+		DurationMs: 1000,
 	}
 
 	var buf bytes.Buffer

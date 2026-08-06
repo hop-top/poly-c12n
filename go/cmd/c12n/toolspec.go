@@ -41,7 +41,7 @@ func buildToolSpec() toolspec.ToolSpec {
 				Contract: &toolspec.Contract{Idempotent: true},
 				OutputSchema: &toolspec.OutputSchema{
 					Format: "json",
-					Fields: []string{"results", "duration_ns", "errors"},
+					Fields: []string{"results", "duration_ms", "errors"},
 				},
 				Intent: &toolspec.Intent{
 					Domain:   "classification",
