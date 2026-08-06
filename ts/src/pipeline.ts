@@ -131,9 +131,13 @@ export class Pipeline {
     if (this.closed) {
       throw new Error('c12n: pipeline is closed');
     }
-    const wire = toWireContext(ctx);
-    this.logger.debug('c12n.pipeline.evaluate.start', 'text_len', ctx.text.length);
     try {
+      // Both of these can throw on a malformed context (`toWireContext`
+      // dereferences collections; `ctx.text.length` throws when `text` is
+      // absent). They must sit inside the try so the `evaluate.failed`
+      // branch reports them instead of the error escaping unlogged.
+      const wire = toWireContext(ctx);
+      this.logger.debug('c12n.pipeline.evaluate.start', 'text_len', ctx.text.length);
       const raw = this.inner.evaluate(wire);
       this.logger.debug('c12n.pipeline.evaluate.ok');
       return raw;
