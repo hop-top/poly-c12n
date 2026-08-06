@@ -31,6 +31,7 @@ pub enum PipelineError {
 }
 
 /// Aggregated result of a full pipeline evaluation.
+#[derive(Debug)]
 pub struct PipelineResult {
     pub results: Vec<SignalResult>,
     pub errors: Vec<PipelineError>,
