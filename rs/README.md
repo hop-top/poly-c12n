@@ -1,7 +1,7 @@
 # hop-top-c12n
 
 Idiomatic Rust SDK over the c12n classification engine
-([`c12n-core`](../core/)).
+([`c12n-core`](https://github.com/hop-top/poly-c12n/tree/main/core)).
 
 > [!WARNING]
 > **Alpha — API and tag history may break.** Ships on the
@@ -20,7 +20,10 @@ This crate (`hop-top-c12n`) wraps the engine with:
   structured [`tracing`](https://docs.rs/tracing) lifecycle events.
 - Re-exports of every engine type so consumers can `use
   hop_top_c12n::{Pipeline, ClassificationContext, ...}` without
-  importing `c12n_core` directly.
+  importing `c12n_core` directly. This includes the built-in signal
+  implementations (`hop_top_c12n::signals::*`) and `async_trait`, so a
+  real pipeline — and custom `Signal` impls — can be built against this
+  crate alone.
 
 ## Install
 
@@ -33,7 +36,10 @@ hop-top-c12n = "=<latest-alpha>"
 ## Quickstart
 
 ```rust
-use hop_top_c12n::{SdkPipeline, PipelineConfig, ClassificationContext};
+use hop_top_c12n::signals::keyword::{
+    KeywordRule, KeywordSignal, MatchOperator, MatchStrategy,
+};
+use hop_top_c12n::{ClassificationContext, PipelineConfig, SdkPipeline};
 use std::time::Duration;
 
 #[tokio::main]
@@ -43,7 +49,20 @@ async fn main() {
         .timeout(Duration::from_secs(5))
         .build();
 
-    let pipeline = SdkPipeline::new(vec![/* signals */], config);
+    let keyword = KeywordSignal::new(
+        "language",
+        vec![KeywordRule {
+            label: "python".to_string(),
+            // `Regex` patterns are matched verbatim — opt into
+            // case-insensitivity explicitly with `(?i)`.
+            patterns: vec!["(?i)python".to_string()],
+            operator: MatchOperator::Or,
+            strategy: MatchStrategy::Regex,
+            threshold: 0.5,
+        }],
+    );
+
+    let pipeline = SdkPipeline::new(vec![Box::new(keyword)], config);
     let ctx = ClassificationContext {
         text: "Write a Python function".to_string(),
         ..Default::default()
@@ -64,4 +83,4 @@ async fn main() {
 
 ## License
 
-[MIT](../LICENSE)
+[MIT](https://github.com/hop-top/poly-c12n/blob/main/LICENSE)

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 /// Configuration for a [`crate::SdkPipeline`]. Mirrors the Go binding's
 /// `PipelineConfig` shape — pure data, no signals (signals are added
-/// via the [`SdkPipeline`] constructor / builder).
+/// via the [`SdkPipeline`](crate::SdkPipeline) constructor / builder).
 #[derive(Debug, Clone)]
 pub struct PipelineConfig {
     pub max_concurrency: usize,
