@@ -31,9 +31,6 @@
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix"
   },
-  "dependencies": {
-    "@hop-top/kit": "^0.5.0-alpha"
-  },
   "devDependencies": {
     "@types/node": "^20",
     "@vitest/browser": "^1",
