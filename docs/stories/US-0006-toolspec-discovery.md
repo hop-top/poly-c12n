@@ -12,11 +12,12 @@ As a tool author wiring c12n into an AI-agent stack, I want a
 machine-readable tool spec so the agent can discover c12n's commands,
 error patterns, and workflows without me writing adapters by hand.
 
-> **Status: partial.** The spec content is complete and well-formed.
-> But it is a hand-authored literal that can drift from the real CLI,
-> and it cannot be obtained from the shipped binary, which panics at
-> startup ([US-0002](US-0002-classify-cli.md)). Consumers can only get
-> it by calling `buildToolSpec()` from Go.
+> **Status: partial.** `c12n toolspec` is now reachable from the
+> shipped binary and emits well-formed JSON — including in a stub
+> build, since it needs no pipeline. But the spec is still a
+> hand-authored literal that can drift from the real CLI, and it is
+> already stale: two shipped commands are missing from it. See
+> [The spec is hand-written and drifting](#the-spec-is-hand-written-and-drifting).
 
 ## Use this when
 
@@ -24,22 +25,67 @@ error patterns, and workflows without me writing adapters by hand.
 - Building a self-documenting agent that surfaces c12n capabilities.
 - Generating SDK stubs from the spec.
 
+For all three, budget for the spec under-reporting the command surface.
+
 ## Result
 
 `c12n toolspec` prints an indented JSON document
-([`go/cmd/c12n/toolspec.go:16-23`](../../go/cmd/c12n/toolspec.go))
-describing:
+([`go/cmd/c12n/toolspec.go`](../../go/cmd/c12n/toolspec.go)) with six
+top-level keys: `name`, `schema_version`, `commands`,
+`error_patterns`, `workflows`, `state_introspection`.
 
-- Subcommands with flags, safety level, contract, and output schema.
-- Error patterns with `Cause` + `Fix`.
-- Workflows (`quick-classify`, `full-setup`, `benchmark-compare`).
-- State introspection (config commands, env vars).
+Actual output, head:
 
-`toolspec` takes **no flags** and `cobra.NoArgs`. There is no
-`--format`; output is always JSON.
+```console
+$ c12n toolspec
+{
+  "name": "c12n",
+  "schema_version": "dev",
+  "commands": [
+    {
+      "name": "classify",
+      "flags": [
+        {
+          "name": "format",
+          "short": "f",
+          "type": "string",
+          "description": "Output format (json|table|text)"
+        },
+```
 
-The spec omits `toolspec` itself from its `Commands` list — an agent
-reading the spec cannot discover the command that produced it.
+The `commands` list holds exactly eight entries:
+
+```console
+$ c12n toolspec | jq -r '.commands[].name' | paste -sd' '
+classify config init signals bench upgrade doctor tip
+```
+
+`toolspec` takes no flags of its own and `cobra.NoArgs`. Its output is
+always JSON regardless of kit's global `--format`.
+
+## The spec is hand-written and drifting
+
+`buildToolSpec()` returns a **hand-written `toolspec.ToolSpec`
+literal** ([`go/cmd/c12n/toolspec.go:50`](../../go/cmd/c12n/toolspec.go)).
+It does not walk the cobra command tree — every command name, flag,
+description, error pattern and workflow is typed out a second time
+alongside its real definition.
+
+That drift has already happened. The binary ships eleven top-level
+commands; the spec lists eight. Missing:
+
+- `status` — added as a real subcommand, absent from the spec.
+- `toolspec` — still omits itself, so an agent reading the spec
+  cannot discover the command that produced it.
+- `help` — cobra's built-in.
+
+`TestE2EToolspecContainsAllCommands` checks the spec contains eight
+names from a hardcoded list, so adding a command to the tree without
+adding it to the spec fails nothing. No test compares the spec against
+the actual command tree.
+
+`toolspec` does not invoke the classifier, so it is unaffected by the
+missing-signals problem in [US-0002](US-0002-classify-cli.md).
 
 ## Steps
 
@@ -51,11 +97,10 @@ c12n toolspec
 c12n toolspec | mcp-loader register --tool c12n
 ```
 
-`c12n toolspec --format json` is **not** valid — it errors on the
-unknown flag. Drop it.
-
-Both invocations above currently fail at startup for the reason in
-[US-0002](US-0002-classify-cli.md).
+`c12n toolspec --format json` is accepted — `--format` is one of kit's
+global persistent flags — but it changes nothing, because the command
+writes JSON directly rather than going through kit's renderer. Prefer
+the bare form.
 
 ## Verify
 
@@ -67,45 +112,38 @@ cd go && CGO_ENABLED=0 go test -run TestE2EToolspecErrorPatternsHaveFix ./cmd/c1
 cd go && CGO_ENABLED=0 go test -run TestE2EToolspecHasWorkflows ./cmd/c12n
 cd go && CGO_ENABLED=0 go test -run TestE2EToolspecWorkflowsHaveSteps ./cmd/c12n
 cd go && CGO_ENABLED=0 go test -run TestE2EToolspecStateIntrospection ./cmd/c12n
+cd go && CGO_ENABLED=0 go test -run TestE2EToolspecNameMatchesBinary ./cmd/c12n
 ```
 
-All seven pass. Six call `buildToolSpec()` directly; only
+All pass. Seven call `buildToolSpec()` directly; only
 `TestE2EToolspecValidJSON` executes the command, and it does so on a
-`newTestRoot()` tree rather than the real binary.
+`newTestRoot()` tree rather than the real binary. Because they all read
+the same literal the spec is built from, none can detect drift against
+the command tree.
 
 ## How it works
 
-`buildToolSpec()` returns a **hand-written `toolspec.ToolSpec`
-literal** ([`go/cmd/c12n/toolspec.go:26`](../../go/cmd/c12n/toolspec.go)).
-It does not walk the cobra command tree and nothing is derived
-automatically — every command name, flag, description, error pattern
-and workflow is typed out a second time alongside its real definition.
-
-That is the drift risk in this story. `TestE2EToolspecContainsAllCommands`
-checks the spec contains eight names from a hardcoded list; no test
-compares the spec against the actual command tree, so a flag added to
-`classify.go` will not fail any test until someone notices the spec is
-stale.
-
-`toolspec` does not invoke the classifier, so it is unaffected by the
-missing-signals problem.
+`buildToolSpec()` constructs and returns the literal; the command
+marshals it with `json.MarshalIndent` and writes it to stdout. Nothing
+is derived from cobra.
 
 ## What this story needs to reach `shipped`
 
-1. Startup panic fixed (US-0002), so the spec is reachable from the CLI.
-2. A conformance test asserting the spec matches the live cobra tree
+1. A conformance test asserting the spec matches the live cobra tree
    (command names, flag names) — or generation from the tree.
-3. `toolspec` listed in its own `Commands`.
+2. `status` and `toolspec` present in `Commands`.
 
 ## Tests
 
 - [`go/cmd/c12n/e2e_test.go:TestE2EToolspecValidJSON`](../../go/cmd/c12n/e2e_test.go)
 - [`go/cmd/c12n/e2e_test.go:TestE2EToolspecContainsAllCommands`](../../go/cmd/c12n/e2e_test.go)
+  — hardcoded eight-name list; cannot detect drift.
 - [`go/cmd/c12n/e2e_test.go:TestE2EToolspecHasErrorPatterns`](../../go/cmd/c12n/e2e_test.go)
 - [`go/cmd/c12n/e2e_test.go:TestE2EToolspecErrorPatternsHaveFix`](../../go/cmd/c12n/e2e_test.go)
 - [`go/cmd/c12n/e2e_test.go:TestE2EToolspecHasWorkflows`](../../go/cmd/c12n/e2e_test.go)
 - [`go/cmd/c12n/e2e_test.go:TestE2EToolspecWorkflowsHaveSteps`](../../go/cmd/c12n/e2e_test.go)
 - [`go/cmd/c12n/e2e_test.go:TestE2EToolspecStateIntrospection`](../../go/cmd/c12n/e2e_test.go)
+- [`go/cmd/c12n/e2e_test.go:TestE2EToolspecNameMatchesBinary`](../../go/cmd/c12n/e2e_test.go)
 - [`go/cmd/c12n/cli_test.go:TestToolspecOutputJSON`](../../go/cmd/c12n/cli_test.go)
 - [`go/cmd/c12n/cli_test.go:TestToolspecWorkflows`](../../go/cmd/c12n/cli_test.go)
 - [`go/cmd/c12n/cli_test.go:TestToolspecStateIntrospection`](../../go/cmd/c12n/cli_test.go)

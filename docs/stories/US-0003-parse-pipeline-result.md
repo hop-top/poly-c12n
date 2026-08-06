@@ -11,10 +11,12 @@ priority: P0
 As a tool author, I want typed accessors on `PipelineResult` so my
 routing logic doesn't `map[string]any`-walk.
 
-> **Status: partial.** The accessors exist and behave as described *for
-> JSON you hand them*. Parsing real native-engine output currently
-> fails — the `errors` field shape does not match. See [Native output
-> does not parse](#native-output-does-not-parse).
+> **Status: partial.** The `errors` wire-shape break is fixed — native
+> engine output parses, and a native test asserts on the decoded
+> diagnostic. What is still unproven is the part this story is named
+> for: no engine output has ever contained a `results` entry, so the
+> per-signal accessors are exercised only against fixtures. See
+> [The score accessors are still fixture-only](#the-score-accessors-are-still-fixture-only).
 
 ## Use this when
 
@@ -41,7 +43,55 @@ argument; there is no aggregate confidence
 ([US-0005](US-0005-low-confidence-detection.md)).
 
 Score lives on `SignalResult.Confidence`
-([`go/types.go:31`](../../go/types.go)). There is no `Score` field.
+([`go/types.go`](../../go/types.go)). There is no `Score` field.
+
+## The errors wire shape is fixed
+
+`PipelineError` is now a string type matching what the FFI actually
+emits ([`go/types.go`](../../go/types.go)):
+
+```go
+// PipelineError is a diagnostic emitted by the pipeline, rendered by the
+// core through its Display impl.
+type PipelineError string
+
+func (e PipelineError) Error() string { return string(e) }
+```
+
+That lines up with `FfiResult.errors: Vec<String>`
+([`core/src/ffi.rs`](../../core/src/ffi.rs)) and with the PHP and
+TypeScript bindings, which always treated `errors` as strings. The
+previous struct shape — with `SignalFailed` / `Timeout` variants —
+matched no payload the FFI has ever produced.
+
+Native evaluation now parses:
+
+```console
+$ cd go && CGO_LDFLAGS="-L$(cd .. && pwd)/target/release" \
+    DYLD_LIBRARY_PATH="$(cd .. && pwd)/target/release" \
+    go test -tags "c12n_native integration" -count=1 ./...
+ok  	hop.top/c12n	0.387s
+ok  	hop.top/c12n/cmd/c12n	0.365s
+```
+
+`TestIntegration_PipelineEmptyResult` asserts on the decoded contents
+of real engine output — not merely that `ParseResult` returned without
+error — so a regression in the wire shape fails the suite.
+
+## The score accessors are still fixture-only
+
+`Signal`, `Signals`, `HasSignal` and `Confidence` all read the
+`Results` slice. Every native evaluation returns `results: []`, because
+no binding can register a detector
+([US-0002](US-0002-classify-cli.md)). So these four accessors have
+never run against engine-produced data — only against
+`validResultJSON`, a hand-written fixture in
+[`go/e2e_test.go`](../../go/e2e_test.go).
+
+The fixture and the engine agree on field names, and the `errors`
+half of the envelope is now natively covered. But "parse
+`PipelineResult` into typed scores" is not proven end to end until the
+engine emits a score.
 
 ## Steps
 
@@ -57,7 +107,8 @@ if err != nil {
 }
 
 if result.HasErrors() {
-    // Includes the NoSignals diagnostic on an unconfigured pipeline.
+    // Includes the NoSignals diagnostic on an unconfigured pipeline —
+    // which is every pipeline today.
     log.Warn("classification errors", "errors", result.Errors)
 }
 
@@ -68,89 +119,65 @@ if score := result.Signal(c12n.SignalCodeContent); score != nil {
 }
 ```
 
+The `Signal` branch is unreachable in practice right now: `Results` is
+always empty.
+
 ## Verify
+
+Fixture-based, stub mode:
 
 ```bash
 cd go && CGO_ENABLED=0 go test -run TestE2E_ParseResult_Accessors ./...
 cd go && CGO_ENABLED=0 go test -run TestE2E_PipelineResult_Signal ./...
 cd go && CGO_ENABLED=0 go test -run TestE2E_PipelineResult_HasSignal ./...
+cd go && CGO_ENABLED=0 go test -run TestPipelineError_WireFormat ./...
+cd go && CGO_ENABLED=0 go test -run TestPipelineError_NoSignalsEnvelope ./...
 ```
 
-All pass. All operate on `validResultJSON`, a hand-written fixture in
-[`go/e2e_test.go`](../../go/e2e_test.go) — not on engine output.
+Against the real engine:
 
-## Native output does not parse
-
-Go models `errors` as a slice of structs:
-
-```go
-// go/result.go:10
-Errors []PipelineError `json:"errors"`
+```bash
+cargo build -p hop-top-c12n-core --release
+cd go && CGO_ENABLED=1 \
+  CGO_LDFLAGS="-L$(cd .. && pwd)/target/release" \
+  DYLD_LIBRARY_PATH="$(cd .. && pwd)/target/release" \
+  go test -tags "c12n_native integration" -count=1 ./...
 ```
 
-The FFI serializes it as a slice of **strings**:
-
-```rust
-// core/src/ffi.rs:198
-errors: result.errors.iter().map(|e| e.to_string()).collect(),
-```
-
-`FfiResult.errors` is `Vec<String>`
-([`core/src/ffi.rs:57`](../../core/src/ffi.rs)). Before PR #42 the
-pipeline always returned an empty `errors` array, so `[]` unmarshalled
-into `[]PipelineError` without complaint and the mismatch stayed
-invisible. Now that an unconfigured pipeline emits `NoSignals`, every
-native evaluation returns one string and `ParseResult` fails outright:
-
-```
-$ cargo build -p hop-top-c12n-core
-$ cd go && CGO_ENABLED=1 \
-    CGO_LDFLAGS="-L$(cd .. && pwd)/target/debug" \
-    DYLD_LIBRARY_PATH="$(cd .. && pwd)/target/debug" \
-    go test -tags "c12n_native integration" -run TestIntegration ./...
---- FAIL: TestIntegration_PipelineEmptyResult
-    integration_test.go:47: ParseResult: json: cannot unmarshal string
-    into Go struct field PipelineResult.errors of type c12n.PipelineError
---- FAIL: TestIntegration_JSONRoundTripThroughFFI
-    integration_test.go:108: ParseResult: json: cannot unmarshal string
-    into Go struct field PipelineResult.errors of type c12n.PipelineError
-FAIL
-```
-
-The `PipelineError` struct's `SignalFailed` / `Timeout` variants
-([`go/types.go:39-47`](../../go/types.go)) match no shape the FFI has
-ever emitted. Go and PHP/TypeScript disagree here: the latter two treat
-`errors` as strings and were updated for `NoSignals`
-([`ts/test/pipeline.integration.test.ts:92`](../../ts/test/pipeline.integration.test.ts),
-[`php/tests/PipelineFfiIntegrationTest.php:119`](../../php/tests/PipelineFfiIntegrationTest.php)).
-Go was not.
+All pass. `TestPipelineError_WireFormat` pins the three exact strings
+the core's `Display` impl emits; `TestIntegration_PipelineEmptyResult`
+is the one that crosses the C ABI.
 
 ## How it works
 
 `ParseResult` is a single eager `json.Unmarshal` into `PipelineResult`
-([`go/result.go:17`](../../go/result.go)) — not lazy, despite what
+([`go/result.go`](../../go/result.go)) — not lazy, despite what
 earlier revisions of this story claimed. Accessors are plain slice
 walks over the already-decoded `Results`. Malformed JSON returns the
 `encoding/json` error; there is no c12n-specific error type, and
 nothing panics.
 
-In stub mode, construction + parsing work on hand-built JSON.
-
 ## What this story needs to reach `shipped`
 
-Reconcile the `errors` wire shape. Either Go decodes `[]string` (matching
-PHP/TS and the FFI as built), or the FFI emits structured errors and
-every binding is updated together. Pick one and cover it with a native
-test that asserts on a non-empty `errors` array.
+A native test that parses an engine result containing at least one
+`results` entry and asserts `Signal` / `Confidence` read it back. That
+needs detector selection plumbed through the FFI first
+([US-0002](US-0002-classify-cli.md)).
 
 ## Tests
 
+- [`go/integration_test.go:TestIntegration_PipelineEmptyResult`](../../go/integration_test.go)
+  — native; asserts on the decoded `errors` array. Passes.
+- [`go/integration_test.go:TestIntegration_JSONRoundTripThroughFFI`](../../go/integration_test.go)
+  — native. Passes.
+- [`go/c12n_test.go:TestPipelineError_WireFormat`](../../go/c12n_test.go)
+  — pins the core's three `Display` strings.
+- [`go/c12n_test.go:TestPipelineError_NoSignalsEnvelope`](../../go/c12n_test.go)
+  — fixture of the envelope every unconfigured evaluation produces.
 - [`go/e2e_test.go:TestE2E_ParseResult_Accessors`](../../go/e2e_test.go)
   — fixture; covers `HasErrors`, `Signals`, `Duration`.
 - [`go/e2e_test.go:TestE2E_PipelineResult_Signal`](../../go/e2e_test.go) — fixture.
 - [`go/e2e_test.go:TestE2E_PipelineResult_HasSignal`](../../go/e2e_test.go) — fixture.
-- [`go/e2e_test.go:TestE2E_ParseResult_HasErrors`](../../go/e2e_test.go)
-  — fixture uses a `SignalFailed` shape the FFI does not emit.
 - [`go/e2e_test.go:TestE2E_ParseResult_InvalidJSON_Error`](../../go/e2e_test.go)
   — empty / garbage / truncated / wrong-type inputs.
 - [`go/result_test.go`](../../go/result_test.go) — unit-level.
