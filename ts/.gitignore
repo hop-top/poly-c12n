@@ -1,6 +1,7 @@
 dist/
 pkg/
 node_modules/
+*.tsbuildinfo
 *.log
 .DS_Store
 coverage/

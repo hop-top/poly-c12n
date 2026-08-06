@@ -33,10 +33,18 @@ use Composer\Script\Event;
  *     `Ffi::libPath()` will resolve the env var directly).
  *   - The cdylib already exists at the requested version (marker match).
  *
- * Failure mode: throw `\RuntimeException`. Composer surfaces the message
- * as an install error, which is the correct UX — silently continuing
- * with a half-installed package would yield cryptic FFI errors at first
- * `Pipeline::__construct` instead.
+ * Failure mode: NON-FATAL. A missing or unreachable prebuilt binary must
+ * not abort `composer install` — the package is still installable and
+ * usable against a locally-built cdylib via `C12N_CORE_LIB_PATH`.
+ * Download failures are reported as a warning carrying the exact
+ * recovery steps (build from source, or set the env var), and the
+ * install proceeds. The first `Pipeline::__construct` then throws a
+ * `C12nException` naming the resolved path, which is the actionable
+ * error the user needs at the point they actually need the library.
+ *
+ * Genuine misconfiguration of THIS package (missing `extra.c12n-core.*`
+ * keys, unsupported host OS/arch) still throws — those are authoring
+ * bugs the maintainer must fix, not transient network conditions.
  */
 final class Installer
 {
@@ -58,9 +66,31 @@ final class Installer
     /**
      * Entry point wired to composer's post-install hook.
      *
-     * @throws \RuntimeException on any non-recoverable failure
+     * Never aborts the install over a failed download — see the class
+     * docblock. Delegates to {@see Installer::fetch()} and downgrades
+     * any thrown failure to a warning plus recovery instructions.
      */
     public static function download(Event $event): void
+    {
+        $io = $event->getIO();
+
+        try {
+            self::fetch($event);
+        } catch (\Throwable $e) {
+            self::warnUnavailable($io, $e->getMessage());
+        }
+    }
+
+    /**
+     * Perform the actual download. Throws on any failure; callers
+     * decide whether that is fatal.
+     *
+     * Separated from {@see Installer::download()} so tests can assert
+     * the failure path directly without a Composer event round-trip.
+     *
+     * @throws \RuntimeException on any non-recoverable failure
+     */
+    public static function fetch(Event $event): void
     {
         $io = $event->getIO();
         $composer = $event->getComposer();
@@ -298,6 +328,50 @@ final class Installer
             ));
         }
         return $raw;
+    }
+
+    /**
+     * Report an unavailable prebuilt binary as a non-fatal warning and
+     * spell out both recovery paths.
+     *
+     * `composer install` continues. The package is fully installed; only
+     * the native cdylib is absent, and `C12N_CORE_LIB_PATH` (or a local
+     * `cargo build`) supplies it.
+     */
+    private static function warnUnavailable(IOInterface $io, string $reason): void
+    {
+        $io->writeError(sprintf(
+            '<warning>c12n-php: prebuilt libc12n_core unavailable (%s).</warning>',
+            $reason,
+        ));
+        $io->writeError(
+            '<warning>c12n-php: install completed WITHOUT the native library. '
+            . 'Classification calls will fail until you supply it:</warning>',
+        );
+        $io->writeError(
+            '<warning>  1. Build from source: '
+            . '`cargo build -p hop-top-c12n-core --release` in a poly-c12n checkout.</warning>',
+        );
+        $io->writeError(sprintf(
+            '<warning>  2. Point c12n at it: '
+            . '`export C12N_CORE_LIB_PATH=/path/to/target/release` '
+            . '(a directory containing %s, or the file itself).</warning>',
+            'libc12n_core.' . self::libExtensionFor(self::detectOsQuietly()),
+        ));
+    }
+
+    /**
+     * Host OS key for messaging purposes. Falls back to 'linux' rather
+     * than throwing — this runs inside an error handler, where a second
+     * exception would mask the first.
+     */
+    private static function detectOsQuietly(): string
+    {
+        try {
+            return self::detectOs(\PHP_OS_FAMILY);
+        } catch (\RuntimeException) {
+            return 'linux';
+        }
     }
 
     /** Skip when `C12N_CORE_LIB_PATH` is set non-empty. */

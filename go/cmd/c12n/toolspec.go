@@ -7,13 +7,29 @@ import (
 	"github.com/spf13/cobra"
 
 	"hop.top/kit/go/ai/toolspec"
+	"hop.top/kit/go/console/cli"
 )
 
 func toolspecCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "toolspec",
 		Short: "Output the c12n ToolSpec as JSON",
-		Args:  cobra.NoArgs,
+		Long: `Emit the machine-readable ToolSpec describing c12n's command surface.
+
+The ToolSpec is what an AI agent or orchestrator reads to learn which
+subcommands exist, what flags they take, how dangerous each one is, and
+which error messages map to which fix. It also carries named workflows
+(quick-classify, full-setup, benchmark-compare) an agent can follow.
+
+Output is JSON on stdout and nothing else, so it pipes cleanly:
+
+  c12n toolspec | jq '.commands[].name'
+
+The spec is built from a literal in the binary, not by reflecting over
+the live cobra tree. It therefore describes the version of c12n you are
+running, but it can drift from the actual command tree if a subcommand
+is added without updating it — treat a mismatch as a bug in c12n.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			spec := buildToolSpec()
 			enc := json.NewEncoder(cmd.OutOrStdout())
@@ -21,6 +37,14 @@ func toolspecCmd() *cobra.Command {
 			return enc.Encode(spec)
 		},
 	}
+
+	// Serializes a compile-time constant to stdout. No config read, no
+	// filesystem access, no network.
+	cli.SetSideEffect(cmd, cli.SideEffectRead)
+	cli.SetIdempotency(cmd, cli.IdempotencyYes)
+	cli.SetTopLevelVerb(cmd)
+
+	return cmd
 }
 
 func buildToolSpec() toolspec.ToolSpec {
@@ -117,7 +141,7 @@ func buildToolSpec() toolspec.ToolSpec {
 					{Name: "text", Short: "t", Type: "string", Description: "Text to classify"},
 					{Name: "input", Type: "string", Description: "JSONL file with ClassificationContext objects"},
 					{Name: "signal", Short: "s", Type: "string", Description: "Filter to a specific signal type"},
-					{Name: "concurrency", Short: "c", Type: "int", Description: "Number of concurrent workers"},
+					{Name: "concurrency", Type: "int", Description: "Number of concurrent workers"},
 					{Name: "output", Short: "o", Type: "string", Description: "Write ben-compatible JSONL to file"},
 				},
 				Safety:   &toolspec.Safety{Level: toolspec.SafetyLevelSafe},

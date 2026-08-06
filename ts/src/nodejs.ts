@@ -1,20 +1,37 @@
 /**
  * Node-without-bundler entry point.
  *
- * Re-exports the full public API plus a `loadNodejs()` loader that picks
- * the `pkg/nodejs/` wasm-pack output instead of `pkg/bundler/`. Consumers
- * who import from `@hop-top/c12n/nodejs` get a `Pipeline.create()` that
- * resolves the nodejs target.
+ * Re-exports the full public API, but overrides `Pipeline` with a
+ * subclass whose static `create()` resolves the `pkg/nodejs/` wasm-pack
+ * output instead of `pkg/bundler/`. Consumers who import from
+ * `@hop-top/c12n/nodejs` therefore get a `Pipeline.create()` that works
+ * under plain Node — the base-class `create()` would resolve
+ * `pkg/bundler/` and throw `Cannot find module`.
  *
  * The `--target nodejs` wasm-pack glue reads the `.wasm` synchronously
  * via `fs.readFileSync()` and exposes the same `Pipeline` class shape as
- * the bundler target, so the public surface is identical.
+ * the bundler target, so the public surface is identical. Instances are
+ * `instanceof` the base `Pipeline` from `@hop-top/c12n`, so code that
+ * accepts one accepts the other.
  */
 
 import type { WasmModule } from './wasm-loader.js';
-import { Pipeline, type PipelineConfig, type Logger } from './pipeline.js';
+import { Pipeline as BasePipeline, type PipelineConfig, type Logger } from './pipeline.js';
 
-export * from './index.js';
+// Re-export everything EXCEPT `Pipeline`, which is overridden below.
+// A blanket `export * from './index.js'` would re-export the bundler
+// `Pipeline` and shadow the nodejs one — that is the bug this file
+// exists to avoid.
+export type { PipelineConfig, PipelineOptions, Logger } from './pipeline.js';
+
+export { normalizeContext, toWireContext } from './context.js';
+export type { ClassificationContext, WireContext } from './context.js';
+
+export { parseResult, PipelineResult } from './result.js';
+export type { PipelineResultRaw, SignalResult, SignalType, ResultError } from './result.js';
+
+export { loadBundler } from './wasm-loader.js';
+export type { WasmModule, WasmPipelineCtor, WasmPipelineInstance } from './wasm-loader.js';
 
 /**
  * Load the nodejs-target wasm module via Node's CommonJS resolver.
@@ -35,15 +52,45 @@ export async function loadNodejs(): Promise<WasmModule> {
 }
 
 /**
- * Override of `Pipeline.create` that uses the nodejs loader. Same shape +
- * semantics as the bundler-target version.
+ * Classification pipeline, nodejs-target flavour.
+ *
+ * Identical to the base `Pipeline` in every respect except that
+ * `create()` loads `pkg/nodejs/` rather than `pkg/bundler/`. Exported
+ * under the name `Pipeline` from the `@hop-top/c12n/nodejs` subpath so
+ * the documented quickstart works verbatim:
+ *
+ * ```ts
+ * import { Pipeline } from '@hop-top/c12n/nodejs';
+ * const pipeline = await Pipeline.create();
+ * ```
+ */
+export class Pipeline extends BasePipeline {
+  /**
+   * Lazy-load the nodejs-target wasm module and construct a pipeline.
+   *
+   * Overrides `BasePipeline.create`, which resolves `pkg/bundler/` and
+   * throws `Cannot find module` under plain Node.
+   */
+  static override async create(
+    opts: { config?: PipelineConfig; logger?: Logger } = {},
+  ): Promise<Pipeline> {
+    const wasm = await loadNodejs();
+    if (typeof wasm.setPanicHook === 'function') {
+      wasm.setPanicHook();
+    }
+    return new Pipeline({ wasm, config: opts.config, logger: opts.logger });
+  }
+}
+
+/**
+ * Construct a nodejs-target pipeline.
+ *
+ * Retained as a named alternative to `Pipeline.create()` — both take the
+ * same options and return the same type. Prefer `Pipeline.create()`; it
+ * matches the bundler-subpath surface.
  */
 export async function createNodePipeline(
   opts: { config?: PipelineConfig; logger?: Logger } = {},
 ): Promise<Pipeline> {
-  const wasm = await loadNodejs();
-  if (typeof wasm.setPanicHook === 'function') {
-    wasm.setPanicHook();
-  }
-  return new Pipeline({ wasm, config: opts.config, logger: opts.logger });
+  return Pipeline.create(opts);
 }

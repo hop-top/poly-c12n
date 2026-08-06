@@ -35,13 +35,13 @@ type SignalResult struct {
 	Metadata   map[string]any `json:"metadata"`
 }
 
-// PipelineError represents an error from a single signal.
-type PipelineError struct {
-	SignalFailed *struct {
-		Name  string `json:"name"`
-		Error string `json:"error"`
-	} `json:"SignalFailed,omitempty"`
-	Timeout *struct {
-		Name string `json:"name"`
-	} `json:"Timeout,omitempty"`
-}
+// PipelineError is a diagnostic emitted by the pipeline, rendered by the core
+// as a human-readable message. The wire format is a plain JSON string, e.g.
+// "signal 'keyword' failed: model not found", "signal 'embedding' timed out",
+// or "pipeline has no registered signals; results will be empty". The core does
+// not emit a structured variant discriminator.
+type PipelineError string
+
+// Error implements the error interface so diagnostics can be wrapped or
+// compared like any other error value.
+func (e PipelineError) Error() string { return string(e) }

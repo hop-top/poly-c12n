@@ -23,6 +23,9 @@ use PHPUnit\Framework\TestCase;
  * C12N_CORE_LIB_PATH="$(pwd)/../target/debug" vendor/bin/phpunit
  * ```
  *
+ * `C12N_CORE_LIB_PATH` accepts a directory OR a direct file path; the
+ * resolution is `Ffi`'s job, not this suite's.
+ *
  * The suite skips gracefully (with `markTestSkipped`) when the cdylib
  * is not present at the resolved path, so `composer test` stays green
  * locally even without a prior `cargo build`.
@@ -47,41 +50,46 @@ final class PipelineFfiIntegrationTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
-        // Resolve the cdylib directory relative to the c12n workspace
-        // root: <repo>/target/debug/. The PHP package lives at
-        // <repo>/php/, hence `dirname(php-root)` is <repo>.
-        $workspaceRoot = dirname(__DIR__, 2);
+        // Caller-supplied override is passed through VERBATIM — directory
+        // or file — so this suite exercises `Ffi::libPath()`'s own
+        // resolution rather than pre-resolving it here. A test that
+        // resolves the path itself would mask a library that cannot.
+        //
+        // Absent an override, fall back to the workspace debug output:
+        // the PHP package lives at <repo>/php/, so `dirname(php-root)`
+        // is <repo>. The directory form is deliberate — it is the shape
+        // the README and Installer tell users to supply.
         $envOverride = getenv('C12N_CORE_LIB_PATH');
 
-        if (is_string($envOverride) && $envOverride !== '') {
-            // Caller-supplied path. Accept either a directory or a
-            // direct file path; resolve the OS-specific filename when
-            // a directory is given.
-            $libPath = is_dir($envOverride)
-                ? rtrim($envOverride, '/') . '/' . self::libFilename()
-                : $envOverride;
-        } else {
-            $libPath = $workspaceRoot . '/target/debug/' . self::libFilename();
-        }
-
-        self::$libPath = $libPath;
+        self::$libPath = is_string($envOverride) && $envOverride !== ''
+            ? $envOverride
+            : dirname(__DIR__, 2) . '/target/debug';
     }
 
     protected function setUp(): void
     {
-        if (self::$libPath === null || !is_file(self::$libPath)) {
-            self::markTestSkipped(sprintf(
-                'libc12n_core cdylib not present at %s. '
-                . 'Run `cargo build -p hop-top-c12n-core` first or set '
-                . 'C12N_CORE_LIB_PATH to a directory containing %s.',
-                self::$libPath ?? '(unresolved)',
-                self::libFilename(),
-            ));
+        if (self::$libPath === null) {
+            self::markTestSkipped('libc12n_core cdylib path unresolved');
         }
 
         $this->originalEnv = getenv('C12N_CORE_LIB_PATH');
         putenv('C12N_CORE_LIB_PATH=' . self::$libPath);
         Ffi::reset();
+
+        // Gate on what `Ffi` itself resolves the override to. If the
+        // resolver is broken, this skips loudly instead of the suite
+        // quietly passing on a path the library never accepts.
+        $resolved = Ffi::libPath();
+        if (!is_file($resolved)) {
+            self::markTestSkipped(sprintf(
+                'libc12n_core cdylib not present at %s (resolved from %s). '
+                . 'Run `cargo build -p hop-top-c12n-core` first or set '
+                . 'C12N_CORE_LIB_PATH to a directory containing %s.',
+                $resolved,
+                self::$libPath,
+                Ffi::libFilename(),
+            ));
+        }
     }
 
     protected function tearDown(): void
@@ -92,6 +100,45 @@ final class PipelineFfiIntegrationTest extends TestCase
             putenv('C12N_CORE_LIB_PATH=' . $this->originalEnv);
         }
         Ffi::reset();
+    }
+
+    // -----------------------------------------------------------------
+    // Loader: directory-form C12N_CORE_LIB_PATH
+    // -----------------------------------------------------------------
+
+    public function testDirectoryLibPathLoadsTheCdylib(): void
+    {
+        // Regression guard: `Ffi::get()` used to gate on `is_file()`
+        // against the raw env var, so the directory form the docs
+        // recommend threw "native library not found". Point the env var
+        // at the DIRECTORY and assert the handle loads for real.
+        $dir = dirname(Ffi::libPath());
+
+        putenv('C12N_CORE_LIB_PATH=' . $dir);
+        Ffi::reset();
+
+        $ffi = Ffi::get();
+
+        $ptr = $ffi->c12n_pipeline_new('{"max_concurrency":4,"timeout_ms":1000}');
+        self::assertNotNull($ptr, 'directory-resolved cdylib produced a usable FFI handle');
+        $ffi->c12n_pipeline_free($ptr);
+    }
+
+    public function testFileLibPathLoadsTheCdylib(): void
+    {
+        // The direct-file form must keep working alongside the
+        // directory form.
+        $file = Ffi::libPath();
+        self::assertFileExists($file);
+
+        putenv('C12N_CORE_LIB_PATH=' . $file);
+        Ffi::reset();
+
+        $ffi = Ffi::get();
+
+        $ptr = $ffi->c12n_pipeline_new('{"max_concurrency":4,"timeout_ms":1000}');
+        self::assertNotNull($ptr);
+        $ffi->c12n_pipeline_free($ptr);
     }
 
     // -----------------------------------------------------------------
@@ -302,18 +349,5 @@ final class PipelineFfiIntegrationTest extends TestCase
         self::assertCount(1, $decoded['errors']);
 
         $pipeline->close();
-    }
-
-    // -----------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------
-
-    private static function libFilename(): string
-    {
-        return match (PHP_OS_FAMILY) {
-            'Darwin' => 'libc12n_core.dylib',
-            'Windows' => 'libc12n_core.dll',
-            default => 'libc12n_core.so',
-        };
     }
 }

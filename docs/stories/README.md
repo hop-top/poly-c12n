@@ -49,6 +49,13 @@ single relevant binding (the CLI stories) list just that one.
 | [US-0006](US-0006-toolspec-discovery.md) | Emit toolspec JSON for AI-agent discovery | `partial` | startup panic; spec hand-authored, can drift |
 | [US-0007](US-0007-json-ffi-roundtrip.md) | Parse JSON from FFI without panic | `partial` | native round-trip fails to parse |
 | [US-0008](US-0008-config-scope.md) | Configure pipeline scope (system/user/project) | `partial` | `--scope system` unusable; no env layer |
+| [US-0009](US-0009-regex-pii-baseline.md) | Catch structured PII with the regex baseline | `partial` | Rust-constructible only; no config plumbing |
+| [US-0010](US-0010-heuristic-jailbreak-baseline.md) | Flag obvious jailbreak attempts with the heuristic baseline | `partial` | same |
+| [US-0011](US-0011-stopword-language-baseline.md) | Identify Western European languages by stopword frequency | `partial` | same |
+| [US-0012](US-0012-approx-tokenizer-estimate.md) | Estimate token counts without a vocabulary | `partial` | same |
+| [US-0013](US-0013-tiered-detector-chains.md) | Trade cost against accuracy with tiered detector chains | `partial` | same |
+| [US-0014](US-0014-detector-registry-by-name.md) | Build detector chains from configuration names | `partial` | same |
+| [US-0015](US-0015-no-signals-diagnostic.md) | Learn that a pipeline has no signals registered | `shipped` | — |
 
 The common root cause behind most of these: `evaluate` only scores
 signals registered at construction, and four of the five bindings
