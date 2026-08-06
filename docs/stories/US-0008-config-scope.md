@@ -12,13 +12,14 @@ As a tool author, I want layered config (system → user → project) so my
 product can ship sane defaults that users / projects override without
 env-var spaghetti.
 
-> **Status: partial.** Two of the three scopes work. `--scope system`
-> fails with `config: scope path is empty` because c12n never sets
-> `SystemConfigPath`. There is no environment-variable layer. And every
-> `c12n` invocation panics at startup
-> ([US-0002](US-0002-classify-cli.md)), so none of the commands below
-> can be run today — the behaviour described here is what the library
-> layer does when driven from Go.
+> **Status: partial.** All three scopes now resolve a real path, and
+> the commands are reachable — the startup panic is fixed. Two things
+> still fall short: `config set` writes numeric values as quoted
+> strings, which makes every later invocation fail to load the file
+> ([Setting a numeric key bricks the config](#setting-a-numeric-key-bricks-the-config)),
+> and the `C12N_<KEY>` env layer reaches viper but not the typed config
+> the pipeline uses ([The env layer does not reach the
+> pipeline](#the-env-layer-does-not-reach-the-pipeline)).
 
 ## Use this when
 
@@ -26,75 +27,133 @@ env-var spaghetti.
 - Internal tool ships with defaults; users tweak personal thresholds
   at user scope.
 
-Per-tenant system-wide defaults are not available — see below.
+Restrict yourself to string-valued keys until the quoting bug is
+fixed, or hand-edit the YAML.
 
 ## Result
 
-- `c12n config set <key> <value> --scope <user|project>` writes to that
-  layer. `--scope project` is the default.
+- `c12n config set <key> <value> --scope <system|user|project>` writes
+  to that layer. `--scope project` is the default.
 - `c12n config get <key>` reads the merged value.
+- `c12n config list` lists entries.
 - `c12n doctor` reports whether each config **file** was found and
   parsed. It does **not** report which layer supplied which key.
 
-## Steps
+`--scope` lives on `config set` and `config list`, not on the `config`
+parent.
 
-```bash
-# per-user override (${XDG_CONFIG_HOME}/c12n/config.yaml)
-c12n config set embedding_threshold 0.8 --scope user
+## System scope now resolves
 
-# project-level (./.c12n.yaml) — this is the default scope
-c12n config set embedding_threshold 0.9 --scope project
+`rootConfigOptions()` populates all three slots
+([`go/cmd/c12n/root.go`](../../go/cmd/c12n/root.go)):
 
-# read merged value
-c12n config get embedding_threshold
-# → 0.9 (project wins)
+```go
+opts := config.Options{
+    SystemConfigPath:  filepath.Join("/etc", "c12n", "config.yaml"),
+    ProjectConfigPath: ".c12n.yaml",
+    EnvPrefix:         "C12N",
+}
+// UserConfigPath = ${XDG_CONFIG_HOME}/c12n/config.yaml
+```
 
-# list entries, optionally filtered by scope
-c12n config list --scope user
+`--scope system` no longer fails with `config: scope path is empty`.
+It now fails only on filesystem permissions, which is correct:
 
-# file-level diagnostics
-c12n doctor
+```console
+$ c12n config set keyword_threshold 0.75 --scope system
+Error: GENERIC: config set: mkdir /etc/c12n: permission denied
+```
+
+Run it under a privileged account and the write succeeds.
+`--scope user` writes the file as expected:
+
+```console
+$ XDG_CONFIG_HOME=/tmp/x c12n config set keyword_threshold 0.8 --scope user
+$ cat /tmp/x/c12n/config.yaml
+keyword_threshold: "0.8"
+```
+
+## Setting a numeric key bricks the config
+
+Note the quotes above. `config set` writes every value as a YAML
+string, but the typed `Config` struct declares `keyword_threshold` as
+`float64`. The file it just wrote therefore fails to load — and
+because config loading happens in `PersistentPreRunE`, **every**
+subsequent `c12n` invocation in that scope fails, including `doctor`:
+
+```console
+$ c12n config set keyword_threshold 0.9 --scope project
+$ cat .c12n.yaml
+keyword_threshold: "0.9"
+$ c12n doctor
+Error: load config: load config .c12n.yaml: yaml: unmarshal errors:
+  line 1: cannot unmarshal !!str `0.9` into float64
+```
+
+Recovery is to hand-edit the file and drop the quotes. String-valued
+keys are unaffected:
+
+```console
+$ c12n config set keyword_strategy regex --scope project
+$ cat .c12n.yaml
+keyword_strategy: regex
+$ c12n config get keyword_strategy
+regex
 ```
 
 Keys are the **flat** names from the pkl schema —
 `embedding_threshold`, `keyword_threshold`, `safety_toxicity_threshold`
 ([`go/config.pkl`](../../go/config.pkl)). Dotted paths such as
-`signal.embedding.threshold` do not exist.
+`signal.embedding.threshold` do not exist. The project file is
+`./.c12n.yaml`, not `./.c12n/config.yaml`.
 
-The project file is `./.c12n.yaml`
-([`go/cmd/c12n/root.go:63`](../../go/cmd/c12n/root.go)), not
-`./.c12n/config.yaml`.
+## The env layer does not reach the pipeline
 
-## System scope does not work
+`rootConfigOptions()` sets `EnvPrefix: "C12N"` and passes kit's viper
+instance, so `C12N_<KEY>` variables are bound. But kit's `BindEnv`
+configures *viper*, and `c12n.LoadConfig` decodes the **typed struct**
+from the file layers only ([`go/config.go`](../../go/config.go)) —
+env values are never merged into it.
 
-`root.go` builds `config.Options` with two paths:
+Probed directly against `LoadConfig` with `C12N_MAX_CONCURRENCY=7`:
 
-```go
-// go/cmd/c12n/root.go:61
-opts := config.Options{
-    UserConfigPath:    filepath.Join(cfgDir, "config.yaml"),
-    ProjectConfigPath: ".c12n.yaml",
-}
+```text
+typed MaxConcurrency=8   viper max_concurrency=7
 ```
 
-`SystemConfigPath` is left empty, so kit rejects the write:
+The typed value — the one `ToPipelineConfig()` forwards to the engine —
+keeps the default. So the env layer is wired but inert for pipeline
+behaviour. `config get` does not read it either:
 
-```
-config.Set("keyword_threshold", "0.75", config.ScopeSystem, opts)
-  → config: scope path is empty
+```console
+$ C12N_KEYWORD_THRESHOLD=0.42 c12n config get keyword_threshold
+Error: GENERIC: config: key not found
 ```
 
-(`config.ScopeProject` with the same options succeeds and writes the
-file.) kit supports the scope — `config.Options` has a
-`SystemConfigPath` field and a `systemConfigPath(tool)` helper — c12n
-simply never populates it. `--scope system` is accepted by the flag
-parser and by `parseConfigScope`
-([`go/cmd/c12n/config_cmd.go:157`](../../go/cmd/c12n/config_cmd.go)),
-then fails at write time.
+## Steps
+
+```bash
+# per-user override (${XDG_CONFIG_HOME}/c12n/config.yaml)
+c12n config set keyword_strategy regex --scope user
+
+# project-level (./.c12n.yaml) — this is the default scope
+c12n config set keyword_strategy bm25 --scope project
+
+# read merged value
+c12n config get keyword_strategy
+# → bm25 (project wins)
+
+# list entries
+c12n config list
+
+# file-level diagnostics
+c12n doctor
+```
 
 ## Verify
 
 ```bash
+cd go && CGO_ENABLED=0 go test -run TestNewRootSetsLayeredConfigPaths ./cmd/c12n
 cd go && CGO_ENABLED=0 go test -run TestE2EConfigSetScopeFlag ./cmd/c12n
 cd go && CGO_ENABLED=0 go test -run TestE2EConfigSubcommands ./cmd/c12n
 cd go && CGO_ENABLED=0 go test -run TestDoctorConfigCheck_UserConfigOnly ./cmd/c12n
@@ -102,11 +161,13 @@ cd go && CGO_ENABLED=0 go test -run TestDoctorConfigCheck_ProjectExists ./cmd/c1
 cd go && CGO_ENABLED=0 go test -run TestDoctorConfigCheck_BothMissing_LoadDefaults ./cmd/c12n
 ```
 
-All pass. `TestE2EConfigSetScopeFlag` asserts the `--scope` flag is
-*registered* and that its default is `project`; it does not perform a
-write, which is why the system-scope failure is invisible to the suite.
-The `TestDoctorConfigCheck_*` trio drives `doctor`'s config check with
-temp files and covers user-only / project-exists / both-missing.
+All pass. `TestNewRootSetsLayeredConfigPaths` asserts all three path
+slots are non-empty — it pins the system-scope fix.
+`TestE2EConfigSetScopeFlag` asserts the `--scope` flag is *registered*
+and defaults to `project`; it does not perform a write, which is why
+the quoting bug above is invisible to the suite. The
+`TestDoctorConfigCheck_*` trio drives `doctor`'s config check with temp
+files.
 
 ## How it works
 
@@ -114,20 +175,18 @@ c12n uses `hop.top/kit/go/core/config` for layered YAML. Effective merge
 order in c12n today (later wins):
 
 1. Embedded defaults — `DefaultConfig()`
-   ([`go/config.go:69`](../../go/config.go)), a Go literal that mirrors
+   ([`go/config.go`](../../go/config.go)), a Go literal that mirrors
    [`go/config.pkl`](../../go/config.pkl) by hand.
-2. ~~System~~ — path never configured; layer absent.
+2. System: `/etc/c12n/config.yaml`.
 3. User: `${XDG_CONFIG_HOME}/c12n/config.yaml`.
 4. Project: `./.c12n.yaml`.
-5. `--config <path>`, which **replaces** all file paths rather than
-   adding a layer ([`go/cmd/c12n/root.go:79`](../../go/cmd/c12n/root.go)).
+5. kit's `-c/--config` tokens. A bare path appends to
+   `ExtraConfigPaths`; a `key=value` token becomes an override that
+   wins over every file layer. This is additive — it no longer
+   replaces the discovered paths.
 
-There is no environment-variable layer. kit offers one via
-`config.Options.EnvPrefix`, but c12n does not set it, so `C12N_<KEY>`
-variables are ignored. The only `C12N_` string in the tree is
-`C12N_CONFIG`, listed in the toolspec's `EnvVars`
-([`go/cmd/c12n/toolspec.go:211`](../../go/cmd/c12n/toolspec.go)) and
-read by nothing.
+The `C12N_<KEY>` env layer sits outside this list: bound to viper,
+absent from the typed struct.
 
 `c12n doctor` runs three checks
 ([`go/cmd/c12n/doctor.go`](../../go/cmd/c12n/doctor.go)):
@@ -144,14 +203,14 @@ c12n separates **schema-of-record** from **user-editable config** from
 | Format | Role | Edited by |
 |--------|------|-----------|
 | `config.pkl` | Schema-of-record + defaults (embedded via `//go:embed`) | c12n maintainers |
-| `*.yaml` | Layered user config (user/project) | end users / ops |
+| `*.yaml` | Layered user config (system/user/project) | end users / ops |
 | JSON | FFI boundary + `config list --format json` output | machines |
 
 Pkl ([pkl-lang.org](https://pkl-lang.org/)) gives per-field doc comments
 that travel with the schema, constrained types (e.g.
 `keyword_strategy: "regex"|"bm25"|"trigram"|"fuzzy"`), and one source
 for shell completion of keys and values
-([`go/cmd/c12n/config_cmd.go:176-208`](../../go/cmd/c12n/config_cmd.go)).
+([`go/cmd/c12n/config_cmd.go`](../../go/cmd/c12n/config_cmd.go)).
 
 Two caveats on the schema-of-record framing:
 
@@ -163,20 +222,21 @@ Two caveats on the schema-of-record framing:
   `embedding_model_path` — `doctor`'s `model-paths` check catches that
   case at runtime instead.
 
-JSON output is `config list --format json`; there is no
-`config --format json`.
+JSON output is `config list --format json`.
 
 ## What this story needs to reach `shipped`
 
-1. Startup panic fixed (US-0002).
-2. `SystemConfigPath` populated, or `--scope system` rejected up front
-   with a clear message.
-3. A test that performs a real `config set` per scope and asserts the
-   file written.
-4. Decide whether the env layer is in scope; if so, set `EnvPrefix`.
+1. `config set` writing values typed to the schema, so numeric keys
+   round-trip instead of bricking the file.
+2. The `C12N_<KEY>` layer merged into the typed `Config`, or the
+   `EnvPrefix` wiring dropped so it does not imply support it lacks.
+3. A test that performs a real `config set` per scope, then reloads and
+   asserts the value — the gap that let both bugs through.
 
 ## Tests
 
+- [`go/cmd/c12n/root_regressions_test.go:TestNewRootSetsLayeredConfigPaths`](../../go/cmd/c12n/root_regressions_test.go)
+  — pins non-empty system/user/project paths.
 - [`go/cmd/c12n/e2e_test.go:TestE2EConfigSetScopeFlag`](../../go/cmd/c12n/e2e_test.go)
   — flag registration + default only.
 - [`go/cmd/c12n/e2e_test.go:TestE2EConfigSubcommands`](../../go/cmd/c12n/e2e_test.go)

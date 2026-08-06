@@ -42,13 +42,13 @@ single relevant binding (the CLI stories) list just that one.
 | ID | Title | Status | Blocked on |
 |----|-------|--------|-----------|
 | [US-0001](US-0001-configure-pipeline.md) | Configure pipeline via PipelineConfig | `partial` | only 2 of ~25 config fields reach the engine |
-| [US-0002](US-0002-classify-cli.md) | Evaluate a prompt via CLI | `planned` | binary panics at startup (duplicate `--config`) |
-| [US-0003](US-0003-parse-pipeline-result.md) | Parse PipelineResult into typed scores | `partial` | Go cannot parse native `errors` payload |
-| [US-0004](US-0004-bench-overhead.md) | Benchmark classification overhead | `planned` | startup panic; benchmarks a signal-less pipeline |
+| [US-0002](US-0002-classify-cli.md) | Evaluate a prompt via CLI | `partial` | CLI runs; no binding can register signals, so `results` is always empty |
+| [US-0003](US-0003-parse-pipeline-result.md) | Parse PipelineResult into typed scores | `partial` | score accessors never see engine output; fixture-only |
+| [US-0004](US-0004-bench-overhead.md) | Benchmark classification overhead | `partial` | benchmarks a signal-less pipeline; measures FFI cost only |
 | [US-0005](US-0005-low-confidence-detection.md) | Detect low-confidence classifications | `planned` | no aggregate confidence; no signals registered |
-| [US-0006](US-0006-toolspec-discovery.md) | Emit toolspec JSON for AI-agent discovery | `partial` | startup panic; spec hand-authored, can drift |
-| [US-0007](US-0007-json-ffi-roundtrip.md) | Parse JSON from FFI without panic | `partial` | native round-trip fails to parse |
-| [US-0008](US-0008-config-scope.md) | Configure pipeline scope (system/user/project) | `partial` | `--scope system` unusable; no env layer |
+| [US-0006](US-0006-toolspec-discovery.md) | Emit toolspec JSON for AI-agent discovery | `partial` | spec hand-authored and already stale — omits `status` and `toolspec` |
+| [US-0007](US-0007-json-ffi-roundtrip.md) | Parse JSON from FFI without panic | `partial` | `{"error": ...}` envelope decodes silently to an empty result |
+| [US-0008](US-0008-config-scope.md) | Configure pipeline scope (system/user/project) | `partial` | `config set` quotes numeric values, breaking later loads; env layer inert |
 | [US-0009](US-0009-regex-pii-baseline.md) | Catch structured PII with the regex baseline | `partial` | Rust-constructible only; no config plumbing |
 | [US-0010](US-0010-heuristic-jailbreak-baseline.md) | Flag obvious jailbreak attempts with the heuristic baseline | `partial` | same |
 | [US-0011](US-0011-stopword-language-baseline.md) | Identify Western European languages by stopword frequency | `partial` | same |
@@ -73,6 +73,24 @@ and tiered chains ([`core/src/chain.rs`](../../core/src/chain.rs)) — but
 TypeScript caller name a detector. Chains remain Rust-constructible
 only. Treat any claim that a non-Rust binding can select detectors as
 false until that plumbing lands.
+
+That plumbing is still missing. `c12n_pipeline_new`
+([`core/src/ffi.rs`](../../core/src/ffi.rs)),
+[`core/src/wasm.rs`](../../core/src/wasm.rs) and
+[`py/src/lib.rs`](../../py/src/lib.rs) all still construct with a
+hardcoded empty signal vector, and `go/config.go`'s
+`ToPipelineConfig()` forwards only `MaxConcurrency` and `Timeout` out
+of ~25 fields — `EnabledSignals()` remains report-only. So the CLI
+stories below describe commands that **run** and return a well-formed
+envelope containing zero results plus the `NoSignals` diagnostic. A
+running command is not a working classifier; none of them is
+`shipped` on that basis.
+
+What the CLI-fixing PRs did change: the startup panics are gone and
+the binary is runnable, `--scope system` resolves a path, Go parses
+the native `errors` payload, and `doctor` / `status` / `toolspec` /
+`signals` work in stub builds because pipeline construction is no
+longer a precondition for every command.
 
 ## A note on test evidence
 
@@ -99,10 +117,12 @@ one these stories were written against:
 | TypeScript | [`ts/test/`](../../ts/test/) — unit, integration, bundler smoke |
 | PHP | [`php/tests/`](../../php/tests/) — unit + FFI integration |
 
-PHP and TypeScript have real suites but no stories. Ironically their
-integration tests are *ahead* of Go's: both were updated for #42's
-`NoSignals` diagnostic, while Go's were not — which is how
-[US-0007](US-0007-json-ffi-roundtrip.md)'s breakage went unnoticed.
+PHP and TypeScript were ahead of Go for a while: both were updated for
+#42's `NoSignals` diagnostic while Go was not, which is how
+[US-0007](US-0007-json-ffi-roundtrip.md)'s breakage went unnoticed. Go
+has since caught up — `PipelineError` matches the wire format and CI
+runs the suite under `-tags "c12n_native integration"`, so the same
+class of drift now fails the build.
 Story coverage for those bindings is being written separately.
 
 Test paths in each story are repo-root-relative (`go/e2e_test.go`, not
