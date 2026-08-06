@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	c12n "hop.top/c12n"
+	"hop.top/kit/go/console/cli"
 	"hop.top/kit/go/console/output"
 )
 
@@ -25,19 +26,32 @@ func classifyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "classify [text]",
 		Short: "Classify text through the c12n pipeline",
-		Long: `Classify text through the c12n pipeline.
+		Long: `Classify text through the c12n pipeline and report every signal that fired.
 
 Text can be provided as positional arguments (joined with spaces),
-via --file to read from a file, or via --stdin to read from standard input.`,
+via --file to read from a file, or via --stdin to read from standard input.
+
+Each enabled signal scores the input independently; the result carries a
+per-signal confidence plus the total pipeline duration. Use --signal to
+narrow the output to one signal type and --min-confidence to drop weak
+matches.
+
+Classification is in-process and read-only: nothing is written and no
+network call is made. Which signals run is decided entirely by config,
+so an unexpectedly empty result usually means the signal is disabled
+rather than that it scored zero — check 'c12n signals'.
+
+In a stub build (no -tags c12n_native) the native model-backed signals
+are unavailable and silently contribute nothing.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			text, err := resolveInput(args, file, stdin, cmd.InOrStdin())
 			if err != nil {
 				return err
 			}
 
-			pipeline := PipelineFromContext(cmd)
-			if pipeline == nil {
-				return fmt.Errorf("pipeline not available")
+			pipeline, err := RequirePipeline(cmd)
+			if err != nil {
+				return err
 			}
 
 			// Use spinner when interactive tty with no args piped.
@@ -97,6 +111,13 @@ via --file to read from a file, or via --stdin to read from standard input.`,
 		func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 			return []string{"json", "table", "text"}, cobra.ShellCompDirectiveNoFileComp
 		})
+
+	// Pure evaluation: reads text in, writes a result to stdout, touches
+	// no persistent state. Same input yields the same verdict, so the
+	// command is safe for an agent to re-run unattended.
+	cli.SetSideEffect(cmd, cli.SideEffectRead)
+	cli.SetIdempotency(cmd, cli.IdempotencyYes)
+	cli.SetTopLevelVerb(cmd)
 
 	return cmd
 }
