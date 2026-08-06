@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::chain::Chain;
 use crate::embedding::{cosine_similarity, EmbeddingEngine};
 use crate::signal::Signal;
 use crate::types::{ClassificationContext, SignalError, SignalResult, SignalType};
@@ -15,22 +16,40 @@ pub trait SatisfactionDetector: Send + Sync {
 
 pub struct FeedbackSignal {
     name: String,
-    detector: Arc<dyn SatisfactionDetector>,
-    engine: Arc<dyn EmbeddingEngine>,
+    detectors: Chain<dyn SatisfactionDetector>,
+    engines: Chain<dyn EmbeddingEngine>,
     reask_threshold: f64,
 }
 
 impl FeedbackSignal {
+    /// Single-implementation constructor, preserved for backward
+    /// compatibility. Equivalent to two one-element chains.
     pub fn new(
         name: impl Into<String>,
         detector: Arc<dyn SatisfactionDetector>,
         engine: Arc<dyn EmbeddingEngine>,
         reask_threshold: f64,
     ) -> Self {
+        Self::with_chains(
+            name,
+            Chain::single(detector),
+            Chain::single(engine),
+            reask_threshold,
+        )
+    }
+
+    /// Tiered constructor. The detector chain supports every strategy; the
+    /// embedding chain is scalar and therefore `FallbackOnError` only.
+    pub fn with_chains(
+        name: impl Into<String>,
+        detectors: Chain<dyn SatisfactionDetector>,
+        engines: Chain<dyn EmbeddingEngine>,
+        reask_threshold: f64,
+    ) -> Self {
         Self {
             name: name.into(),
-            detector,
-            engine,
+            detectors,
+            engines,
             reask_threshold,
         }
     }
@@ -49,17 +68,18 @@ impl FeedbackSignal {
 #[async_trait]
 impl Signal for FeedbackSignal {
     async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
-        let satisfaction_score = self.detector.score(&ctx.text).await?;
+        let outcome = self.detectors.score(&ctx.text).await?;
+        let satisfaction_score = outcome.value;
 
         let mut reask_similarity: f64 = 0.0;
         let mut is_reask = false;
 
         if let Some(last) = ctx.history.last() {
             let embeddings = self
-                .engine
+                .engines
                 .embed_batch(&[ctx.text.as_str(), last.as_str()])
-                .await
-                .map_err(|e| SignalError::Inference(e.to_string()))?;
+                .await?
+                .value;
 
             let sim = cosine_similarity(&embeddings[0], &embeddings[1]);
             reask_similarity = sim as f64;
@@ -87,6 +107,7 @@ impl Signal for FeedbackSignal {
             "reask_similarity".into(),
             serde_json::Value::from(reask_similarity),
         );
+        outcome.provenance.write_metadata(&mut metadata);
 
         Ok(SignalResult {
             name: self.name.clone(),

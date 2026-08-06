@@ -6,6 +6,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::Mutex;
 
+use crate::chain::{Chain, ChainProvenance};
 use crate::signal::Signal;
 use crate::types::{ClassificationContext, SignalError, SignalResult, SignalType};
 
@@ -21,14 +22,21 @@ pub trait JailbreakDetector: Send + Sync {
 }
 
 pub struct JailbreakSignal {
-    detector: Box<dyn JailbreakDetector>,
+    chain: Chain<dyn JailbreakDetector>,
     cached_result: Arc<Mutex<HashMap<u64, SignalResult>>>,
 }
 
 impl JailbreakSignal {
+    /// Single-detector constructor, preserved for backward compatibility.
+    /// Equivalent to a one-element chain.
     pub fn new(detector: Box<dyn JailbreakDetector>) -> Self {
+        Self::with_chain(Chain::single(Arc::from(detector)))
+    }
+
+    /// Tiered constructor.
+    pub fn with_chain(chain: Chain<dyn JailbreakDetector>) -> Self {
         Self {
-            detector,
+            chain,
             cached_result: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -53,9 +61,13 @@ impl Signal for JailbreakSignal {
             }
         }
 
-        // Fail-closed: on detector error, assume jailbreak
-        let (confidence, labels) = match self.detector.detect(&ctx.text).await {
-            Ok(v) => v,
+        // Fail-closed: when every tier in the chain errors, assume jailbreak.
+        let mut metadata = HashMap::new();
+        let (confidence, labels) = match self.chain.detect(&ctx.text).await {
+            Ok(outcome) => {
+                outcome.provenance.write_metadata(&mut metadata);
+                outcome.value
+            }
             Err(_) => (1.0, vec!["error_failclosed".to_string()]),
         };
 
@@ -64,7 +76,7 @@ impl Signal for JailbreakSignal {
             signal_type: self.signal_type(),
             confidence,
             labels,
-            metadata: HashMap::new(),
+            metadata,
         };
 
         // Store in cache
@@ -104,19 +116,34 @@ pub trait PiiDetector: Send + Sync {
 }
 
 pub struct PiiSignal {
-    detector: Box<dyn PiiDetector>,
+    chain: Chain<dyn PiiDetector>,
     deny_list: HashSet<String>,
     max_chunk_size: usize,
 }
 
 impl PiiSignal {
+    /// Single-detector constructor, preserved for backward compatibility.
+    /// Equivalent to a one-element chain.
     pub fn new(
         detector: Box<dyn PiiDetector>,
         deny_list: HashSet<String>,
         max_chunk_size: usize,
     ) -> Self {
+        Self::with_chain(
+            Chain::single(Arc::from(detector)),
+            deny_list,
+            max_chunk_size,
+        )
+    }
+
+    /// Tiered constructor.
+    pub fn with_chain(
+        chain: Chain<dyn PiiDetector>,
+        deny_list: HashSet<String>,
+        max_chunk_size: usize,
+    ) -> Self {
         Self {
-            detector,
+            chain,
             deny_list,
             max_chunk_size,
         }
@@ -160,9 +187,31 @@ impl Signal for PiiSignal {
     async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         let chunks = Self::chunk_text(&ctx.text, self.max_chunk_size);
         let mut all_entities: Vec<PiiEntity> = Vec::new();
+        // Chunking calls the chain once per chunk. Fold the per-chunk records
+        // into one: the union of tiers touched, and the deepest (most
+        // expensive) tier any chunk had to reach.
+        let mut provenance = ChainProvenance {
+            strategy: self.chain.strategy().as_str().to_string(),
+            ..Default::default()
+        };
 
         for (offset, chunk) in chunks {
-            let mut entities = self.detector.detect_entities(chunk).await?;
+            let outcome = self.chain.detect_entities(chunk).await?;
+            for tier in outcome.provenance.tiers_attempted {
+                if !provenance.tiers_attempted.contains(&tier) {
+                    provenance.tiers_attempted.push(tier);
+                }
+            }
+            provenance
+                .tier_errors
+                .extend(outcome.provenance.tier_errors);
+            provenance.winning_tier =
+                match (provenance.winning_tier, outcome.provenance.winning_tier) {
+                    (Some(a), Some(b)) => Some(a.max(b)),
+                    (a, b) => a.or(b),
+                };
+
+            let mut entities = outcome.value;
             // Adjust offsets for chunked text
             for e in &mut entities {
                 e.start += offset;
@@ -170,6 +219,7 @@ impl Signal for PiiSignal {
             }
             all_entities.extend(entities);
         }
+        provenance.tiers_attempted.sort_unstable();
 
         // Filter to denied entity types
         let flagged: Vec<PiiEntity> = all_entities
@@ -206,6 +256,7 @@ impl Signal for PiiSignal {
             "entities".to_string(),
             serde_json::Value::Array(entity_details),
         );
+        provenance.write_metadata(&mut metadata);
 
         Ok(SignalResult {
             name: self.name().to_string(),
@@ -236,23 +287,28 @@ pub trait ToxicityDetector: Send + Sync {
 }
 
 pub struct ToxicitySignal {
-    detector: Box<dyn ToxicityDetector>,
+    chain: Chain<dyn ToxicityDetector>,
     threshold: f64,
 }
 
 impl ToxicitySignal {
+    /// Single-detector constructor, preserved for backward compatibility.
+    /// Equivalent to a one-element chain.
     pub fn new(detector: Box<dyn ToxicityDetector>, threshold: f64) -> Self {
-        Self {
-            detector,
-            threshold,
-        }
+        Self::with_chain(Chain::single(Arc::from(detector)), threshold)
+    }
+
+    /// Tiered constructor.
+    pub fn with_chain(chain: Chain<dyn ToxicityDetector>, threshold: f64) -> Self {
+        Self { chain, threshold }
     }
 }
 
 #[async_trait]
 impl Signal for ToxicitySignal {
     async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
-        let scores = self.detector.detect(&ctx.text).await?;
+        let outcome = self.chain.detect(&ctx.text).await?;
+        let scores = outcome.value;
 
         let flagged: Vec<&(String, f64)> = scores
             .iter()
@@ -277,6 +333,7 @@ impl Signal for ToxicitySignal {
             .collect();
         metadata.insert("scores".to_string(), serde_json::Value::Object(scores_map));
         metadata.insert("threshold".to_string(), serde_json::json!(self.threshold));
+        outcome.provenance.write_metadata(&mut metadata);
 
         Ok(SignalResult {
             name: self.name().to_string(),
@@ -491,5 +548,126 @@ mod tests {
 
         assert_eq!(result.confidence, 0.0);
         assert!(result.labels.is_empty());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Chain integration tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod chain_tests {
+    use super::*;
+    use crate::chain::{ChainStrategy, PROVENANCE_METADATA_KEY};
+
+    struct TieredPii {
+        entities: Vec<PiiEntity>,
+    }
+
+    #[async_trait]
+    impl PiiDetector for TieredPii {
+        async fn detect_entities(&self, _text: &str) -> Result<Vec<PiiEntity>, SignalError> {
+            Ok(self.entities.clone())
+        }
+    }
+
+    fn entity(kind: &str, confidence: f64) -> PiiEntity {
+        PiiEntity {
+            entity_type: kind.into(),
+            text: "a@b.com".into(),
+            start: 0,
+            end: 7,
+            confidence,
+        }
+    }
+
+    fn ctx(text: &str) -> ClassificationContext {
+        ClassificationContext {
+            text: text.to_string(),
+            history: vec![],
+            headers: HashMap::new(),
+            image_url: None,
+            config: HashMap::new(),
+        }
+    }
+
+    /// End-to-end: a tiered PiiSignal escalates and the winning tier is
+    /// visible in the emitted `SignalResult::metadata`.
+    #[tokio::test]
+    async fn pii_signal_reports_escalation_in_metadata() {
+        let chain = Chain::new(
+            vec![
+                Arc::new(TieredPii {
+                    entities: vec![entity("EMAIL", 0.20)],
+                }) as Arc<dyn PiiDetector>,
+                Arc::new(TieredPii {
+                    entities: vec![entity("EMAIL", 0.98)],
+                }),
+            ],
+            ChainStrategy::Escalate { threshold: 0.5 },
+        )
+        .unwrap();
+
+        let mut deny = HashSet::new();
+        deny.insert("EMAIL".to_string());
+
+        let signal = PiiSignal::with_chain(chain, deny, 4096);
+        let result = signal.evaluate(&ctx("a@b.com")).await.unwrap();
+
+        assert_eq!(result.confidence, 0.98, "tier 1's answer surfaced");
+        let record = &result.metadata[PROVENANCE_METADATA_KEY];
+        assert_eq!(record["strategy"], "escalate");
+        assert_eq!(record["winning_tier"], 1);
+        assert_eq!(record["escalated"], true);
+    }
+
+    /// A signal built with the legacy single-detector constructor still emits
+    /// provenance, reporting tier 0.
+    #[tokio::test]
+    async fn legacy_constructor_reports_tier_zero() {
+        let signal = PiiSignal::new(
+            Box::new(TieredPii {
+                entities: vec![entity("EMAIL", 0.9)],
+            }),
+            HashSet::new(),
+            4096,
+        );
+        let result = signal.evaluate(&ctx("a@b.com")).await.unwrap();
+        let record = &result.metadata[PROVENANCE_METADATA_KEY];
+        assert_eq!(record["winning_tier"], 0);
+        assert_eq!(record["escalated"], false);
+    }
+
+    /// Toxicity merges categories across tiers, deduping on category name.
+    #[tokio::test]
+    async fn toxicity_signal_merges_tiers() {
+        struct Tox(Vec<(String, f64)>);
+
+        #[async_trait]
+        impl ToxicityDetector for Tox {
+            async fn detect(&self, _t: &str) -> Result<Vec<(String, f64)>, SignalError> {
+                Ok(self.0.clone())
+            }
+        }
+
+        let chain = Chain::new(
+            vec![
+                Arc::new(Tox(vec![("hate".into(), 0.4)])) as Arc<dyn ToxicityDetector>,
+                Arc::new(Tox(vec![("hate".into(), 0.92), ("violence".into(), 0.71)])),
+            ],
+            ChainStrategy::MergeAll,
+        )
+        .unwrap();
+
+        let signal = ToxicitySignal::with_chain(chain, 0.5);
+        let result = signal.evaluate(&ctx("bad")).await.unwrap();
+
+        assert_eq!(result.confidence, 0.92, "max across tiers");
+        assert!(result.labels.contains(&"hate".to_string()));
+        assert!(result.labels.contains(&"violence".to_string()));
+        assert_eq!(
+            result.metadata[PROVENANCE_METADATA_KEY]["strategy"],
+            "merge_all"
+        );
     }
 }
