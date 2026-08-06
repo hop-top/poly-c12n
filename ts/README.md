@@ -53,6 +53,13 @@ const pipeline = await Pipeline.create();
 // ... same as above
 ```
 
+The `Pipeline` exported from `/nodejs` is a subclass of the one exported
+from `.`; only `create()` differs, resolving the `pkg/nodejs/` wasm-pack
+artifact instead of `pkg/bundler/`. Instances satisfy `instanceof
+Pipeline` against the base class, so code typed against `@hop-top/c12n`
+accepts them unchanged. `createNodePipeline()` is a named alias for
+`Pipeline.create()` and takes the same options.
+
 ### Browser
 
 The `.` subpath is bundler-friendly out of the box. Vite, webpack 5,
