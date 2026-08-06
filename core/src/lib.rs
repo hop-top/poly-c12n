@@ -9,6 +9,7 @@ pub mod embedding;
 pub mod ffi;
 pub mod pipeline;
 pub mod prototype;
+pub mod registry;
 pub mod rt;
 pub mod signal;
 pub mod signals;
