@@ -2,6 +2,7 @@ pub mod code;
 pub mod complexity;
 pub mod context;
 pub mod cost;
+pub mod detectors;
 pub mod domain;
 pub mod embedding_signal;
 pub mod feedback;
