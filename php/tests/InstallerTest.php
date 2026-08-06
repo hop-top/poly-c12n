@@ -249,6 +249,57 @@ final class InstallerTest extends TestCase
         self::assertStringContainsString('C12N_CORE_LIB_PATH set, skipping', $io->getOutput());
     }
 
+    // -- download() must never abort composer install ------------------
+
+    public function testDownloadDoesNotThrowWhenReleaseAssetIsUnreachable(): void
+    {
+        // Regression guard: a missing prebuilt binary used to abort the
+        // whole `composer install`. Point the template at an
+        // unroutable host so the fetch fails fast, and assert the hook
+        // swallows it.
+        $io = new BufferIO();
+        $event = $this->makeEvent($io, extra: [
+            'c12n-core' => [
+                'version' => '0.0.0-does-not-exist',
+                'release-url-template' =>
+                    'https://127.0.0.1:1/{tag}/libc12n_core-{os}-{arch}.tar.gz',
+            ],
+        ]);
+
+        Installer::download($event);
+
+        $out = $io->getOutput();
+        self::assertStringContainsString('prebuilt libc12n_core unavailable', $out);
+        // The message must name both recovery paths, not just fail.
+        self::assertStringContainsString('cargo build -p hop-top-c12n-core', $out);
+        self::assertStringContainsString('C12N_CORE_LIB_PATH', $out);
+        self::assertStringContainsString('install completed WITHOUT the native library', $out);
+    }
+
+    public function testDownloadDoesNotThrowOnMissingExtraConfig(): void
+    {
+        // Even an authoring bug in extra.c12n-core must not brick the
+        // consumer's `composer install`.
+        $io = new BufferIO();
+        $event = $this->makeEvent($io, extra: []);
+
+        Installer::download($event);
+
+        self::assertStringContainsString('prebuilt libc12n_core unavailable', $io->getOutput());
+    }
+
+    public function testFetchStillThrowsSoFailuresAreObservable(): void
+    {
+        // download() swallows; fetch() is the raw operation and must
+        // keep surfacing failures for callers that want them.
+        $io = new BufferIO();
+        $event = $this->makeEvent($io, extra: []);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/extra\.c12n-core\.version/');
+        Installer::fetch($event);
+    }
+
     // -- Helpers ------------------------------------------------------
 
     /**

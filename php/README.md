@@ -4,12 +4,12 @@ LLM request classification engine — PHP FFI bindings over the Rust core.
 
 ## Status
 
-Alpha — initial scaffold. The FFI surface is wired against the
-cbindgen-generated header in `c12n-core/include/libc12n_core.h`; the
-native `libc12n_core.{so,dylib,dll}` is downloaded by the post-install
-script (T-0143, not yet implemented). For local development, build the
-cdylib from `c12n-core/` and either symlink it into `runtime/lib/` or
-set `C12N_CORE_LIB_PATH`.
+Alpha. The FFI surface is wired against the cbindgen-generated header in
+`c12n-core/include/libc12n_core.h`; the native
+`libc12n_core.{so,dylib,dll}` is downloaded by the post-install script
+when a matching release exists. For local development, build the cdylib
+from `core/` and either symlink it into `runtime/lib/` or set
+`C12N_CORE_LIB_PATH`.
 
 ## Requirements
 
@@ -20,8 +20,9 @@ set `C12N_CORE_LIB_PATH`.
   (CLI is usually fine; web SAPI requires `ffi.enable=preload` and a
   preload script).
 - **`libc12n_core`** — the Rust cdylib. Downloaded automatically by
-  Composer post-install once T-0143 ships; before then, build from
-  `c12n-core` and point `C12N_CORE_LIB_PATH` at the artifact.
+  Composer post-install when a prebuilt release asset matches your
+  platform; otherwise build from `core/` and point `C12N_CORE_LIB_PATH`
+  at the artifact (directory or file).
 
 ## Install
 
@@ -29,10 +30,22 @@ set `C12N_CORE_LIB_PATH`.
 composer require hop-top/c12n
 ```
 
-The `post-install-cmd` hook (registered now, implemented in T-0143)
-fetches the matching `libc12n_core` tarball from
-`https://github.com/hop-top/c12n/releases/download/{tag}/...`,
+The `post-install-cmd` hook fetches the matching `libc12n_core` tarball
+from `https://github.com/hop-top/poly-c12n/releases/download/{tag}/...`,
 SHA256-verifies it, and extracts into `vendor/hop-top/c12n/runtime/lib/`.
+
+If no prebuilt binary is available for your platform — or the release
+has not been published yet — the download is **non-fatal**:
+`composer install` completes with a warning, and you supply the cdylib
+yourself:
+
+```bash
+# In a poly-c12n checkout:
+cargo build -p hop-top-c12n-core --release
+
+# Point c12n at the output directory (or the .dylib/.so/.dll directly):
+export C12N_CORE_LIB_PATH="$(pwd)/target/release"
+```
 
 ## Quick start
 
@@ -73,6 +86,11 @@ order (ADR-0002 §4):
    useful when developing against a sibling cdylib checkout.
 3. Default: `runtime/lib/libc12n_core.{so,dylib,dll}` relative to this
    package, populated by the post-install Installer.
+
+Sources 1 and 2 accept **either** a directory containing the cdylib
+(e.g. a cargo `target/release/` output dir) **or** a direct path to the
+shared-object file. When given a directory, the OS-specific filename
+(`libc12n_core.dylib` / `.so` / `.dll`) is appended automatically.
 
 ## Header contract
 
@@ -128,7 +146,7 @@ populates from the workspace root.
 | Symptom                                                  | Fix |
 |----------------------------------------------------------|-----|
 | `FFI is not enabled`                                     | Add `ffi.enable=true` to `php.ini`. |
-| `c12n: native library not found at ...`                  | Run `composer install` to trigger the post-install download, or set `C12N_CORE_LIB_PATH=/abs/path/libc12n_core.dylib`. |
+| `c12n: native library not found at ...`                  | Build the cdylib (`cargo build -p hop-top-c12n-core --release`) and set `C12N_CORE_LIB_PATH` to the output directory or the file itself. |
 | `c12n: c12n_pipeline_new returned null`                  | Malformed config JSON or tokio runtime init failure. Check `maxConcurrency` is positive and `timeoutMs` fits in `u64`. |
 | `c12n: pipeline is closed`                               | The pipeline was explicitly closed (or `__destruct`ed) before `evaluate()`. Construct a fresh `Pipeline`. |
 | `c12n: <error message>` (from `evaluate`)                | The Rust core returned a JSON error envelope. The message is the verbatim string from `c12n_pipeline_evaluate`. |
