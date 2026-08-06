@@ -11,13 +11,11 @@
  * sequentially; concurrent callers must serialise themselves (same
  * constraint as the Go `Pipeline.mu` lock).
  *
- * Optional kit-ts logging: pass a `Logger` in `PipelineOptions.logger` to
- * receive structured lifecycle events. The `Logger` interface matches
- * `@hop-top/kit`'s `log.ts` shape — `createLogger()` from kit-ts can be
- * passed straight in once kit-ts exposes the `./log` subpath (currently
- * only the source file exists; the exports table in kit-ts package.json
- * doesn't expose it yet — see kit-ts package.json `exports`). Callers can
- * also supply any duck-typed object matching the interface.
+ * Optional logging: pass a `Logger` in `PipelineOptions.logger` to
+ * receive structured lifecycle events. `Logger` is a structural
+ * interface — any duck-typed object with `info`/`warn`/`error`/`debug`
+ * works, including loggers from external packages. This package takes
+ * no logging dependency of its own.
  */
 
 import { toWireContext, type ClassificationContext } from './context.js';
@@ -36,10 +34,9 @@ export interface PipelineConfig {
 }
 
 /**
- * Minimal structural Logger interface compatible with `@hop-top/kit`'s
- * `Logger` (see `kit/sdk/ts/src/log.ts`). Pipeline accepts any object
- * matching this shape; kit-ts callers pass their `createLogger()` output
- * directly once the `./log` subpath ships in kit-ts.
+ * Minimal structural Logger interface. Pipeline accepts any object
+ * matching this shape, so callers can pass a logger from whatever
+ * library they already use without this package depending on it.
  */
 export interface Logger {
   info(msg: string, ...keyvals: unknown[]): void;
