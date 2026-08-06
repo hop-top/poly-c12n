@@ -113,7 +113,10 @@ final class PipelineFfiIntegrationTest extends TestCase
         self::assertArrayHasKey('errors', $decoded);
         self::assertArrayHasKey('duration_ms', $decoded);
         self::assertSame([], $decoded['results']);
-        self::assertSame([], $decoded['errors']);
+        // A pipeline with no registered signals reports that loudly rather
+        // than returning a silently-empty envelope.
+        self::assertCount(1, $decoded['errors']);
+        self::assertStringContainsString('no registered signals', (string) $decoded['errors'][0]);
         self::assertIsInt($decoded['duration_ms']);
         self::assertGreaterThanOrEqual(0, $decoded['duration_ms']);
 
@@ -131,8 +134,11 @@ final class PipelineFfiIntegrationTest extends TestCase
         $result = new PipelineResult($json);
 
         self::assertSame([], $result->results());
-        self::assertSame([], $result->errors());
-        self::assertFalse($result->hasErrors());
+        // No signals are registered on the FFI surface, so the engine reports
+        // `NoSignals` instead of returning a silently-empty envelope.
+        self::assertCount(1, $result->errors());
+        self::assertStringContainsString('no registered signals', $result->errors()[0]);
+        self::assertTrue($result->hasErrors());
         self::assertGreaterThanOrEqual(0, $result->durationMs());
 
         $pipeline->close();
@@ -291,7 +297,9 @@ final class PipelineFfiIntegrationTest extends TestCase
         self::assertIsArray($decoded['errors']);
         self::assertIsInt($decoded['duration_ms']);
         self::assertSame([], $decoded['results']);
-        self::assertSame([], $decoded['errors']);
+        // Structural parity is what this asserts — `errors` is an array on
+        // every binding. Its contents depend on configuration, not language.
+        self::assertCount(1, $decoded['errors']);
 
         $pipeline->close();
     }

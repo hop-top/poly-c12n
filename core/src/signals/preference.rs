@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
+use crate::chain::Chain;
 use crate::signal::Signal;
 use crate::types::{ClassificationContext, SignalError, SignalResult, SignalType};
 
@@ -14,13 +15,15 @@ pub trait PreferenceLlm: Send + Sync {
 
 pub struct PreferenceSignal {
     name: String,
-    llm: Arc<dyn PreferenceLlm>,
+    chain: Chain<dyn PreferenceLlm>,
     system_prompt: String,
     timeout: Duration,
     labels: Vec<String>,
 }
 
 impl PreferenceSignal {
+    /// Single-LLM constructor, preserved for backward compatibility.
+    /// Equivalent to a one-element chain.
     pub fn new(
         name: impl Into<String>,
         llm: Arc<dyn PreferenceLlm>,
@@ -28,9 +31,25 @@ impl PreferenceSignal {
         timeout: Duration,
         labels: Vec<String>,
     ) -> Self {
+        Self::with_chain(name, Chain::single(llm), system_prompt, timeout, labels)
+    }
+
+    /// Tiered constructor. `PreferenceLlm` returns a bare `String` with no
+    /// confidence, so [`Chain::new`] only accepts `FallbackOnError` here.
+    ///
+    /// The `timeout` bounds the whole chain, not each tier: a caller asking
+    /// for an answer within N ms wants it within N ms regardless of how many
+    /// providers were tried.
+    pub fn with_chain(
+        name: impl Into<String>,
+        chain: Chain<dyn PreferenceLlm>,
+        system_prompt: impl Into<String>,
+        timeout: Duration,
+        labels: Vec<String>,
+    ) -> Self {
         Self {
             name: name.into(),
-            llm,
+            chain,
             system_prompt: system_prompt.into(),
             timeout,
             labels,
@@ -67,15 +86,22 @@ impl PreferenceSignal {
 #[async_trait]
 impl Signal for PreferenceSignal {
     async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
-        let response =
-            crate::rt::timeout(self.timeout, self.llm.query(&ctx.text, &self.system_prompt))
-                .await
-                .map_err(|_| SignalError::Timeout)??;
+        // `rt::timeout` (not `tokio::time::timeout`) so this stays working on
+        // wasm32, where tokio's timer driver traps. Wraps the chain so every
+        // tier shares one deadline rather than each getting a fresh one.
+        let outcome = crate::rt::timeout(
+            self.timeout,
+            self.chain.query(&ctx.text, &self.system_prompt),
+        )
+        .await
+        .map_err(|_| SignalError::Timeout)??;
+        let response = outcome.value;
 
         let (label, confidence) = self.find_label(&response);
 
         let mut metadata = HashMap::new();
         metadata.insert("raw_response".into(), serde_json::Value::from(response));
+        outcome.provenance.write_metadata(&mut metadata);
 
         Ok(SignalResult {
             name: self.name.clone(),

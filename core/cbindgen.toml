@@ -7,11 +7,15 @@ namespace = ""
 
 [export]
 include = []
-# `rt.rs`'s `setTimeout`/`clearTimeout` imports are wasm-bindgen JS bindings
-# gated to `wasm32-unknown-unknown`. cbindgen does not evaluate `cfg`, so it
-# would otherwise emit them into the C header consumed by cgo/PHP FFI, where
-# no such symbols exist.
-exclude = ["set_timeout", "clear_timeout"]
+# Symbols that must never reach the C header consumed by cgo/PHP FFI:
+#
+#  - `set_timeout`/`clear_timeout` are wasm-bindgen JS imports gated to
+#    `wasm32-unknown-unknown`. cbindgen does not evaluate `cfg`, so it would
+#    otherwise emit them where no such symbols exist.
+#  - `DEFAULT_ESCALATE_THRESHOLD` is a Rust-only tuning constant. cbindgen
+#    emits every `pub const` reachable from the crate root, so anything
+#    re-exported in lib.rs becomes public ABI by accident.
+exclude = ["set_timeout", "clear_timeout", "DEFAULT_ESCALATE_THRESHOLD"]
 
 [parse]
 parse_deps = false

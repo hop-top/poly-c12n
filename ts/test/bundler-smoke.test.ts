@@ -123,9 +123,11 @@ describe('bundler target — end-to-end in a real browser', () => {
       expect(Array.isArray(parsed.errors)).toBe(true);
       expect(typeof parsed.duration_ms).toBe('number');
 
-      // Empty pipeline → empty results + no errors.
+      // Empty pipeline → empty results, plus the no-signals diagnostic the
+      // engine now emits instead of a silently-empty envelope.
       expect(parsed.results).toEqual([]);
-      expect(parsed.errors).toEqual([]);
+      expect(parsed.errors).toHaveLength(1);
+      expect(String((parsed.errors as unknown[])[0])).toMatch(/no registered signals/);
       expect(parsed.duration_ms as number).toBeGreaterThanOrEqual(0);
     } finally {
       pipeline.close();

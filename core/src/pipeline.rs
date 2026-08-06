@@ -22,6 +22,12 @@ pub enum PipelineError {
     SignalFailed { name: String, error: SignalError },
     #[error("signal '{name}' timed out")]
     Timeout { name: String },
+    /// Emitted when `evaluate` runs against a pipeline with zero registered
+    /// signals. Every binding surfaces `errors`, so this turns the previously
+    /// silent `{"results":[],"errors":[]}` envelope into a loud, actionable
+    /// diagnostic in all six published artifacts at once.
+    #[error("pipeline has no registered signals; results will be empty")]
+    NoSignals,
 }
 
 /// Aggregated result of a full pipeline evaluation.
@@ -58,6 +64,18 @@ impl Pipeline {
     /// Fan out all signals in parallel, respecting concurrency and timeout limits.
     pub async fn evaluate(&self, ctx: &ClassificationContext) -> PipelineResult {
         let start = Instant::now();
+
+        // Fail loudly rather than returning a silently-empty envelope. An
+        // unconfigured pipeline is almost always a wiring bug in the caller,
+        // not a legitimate "nothing matched" outcome.
+        if self.signals.is_empty() {
+            return PipelineResult {
+                results: Vec::new(),
+                errors: vec![PipelineError::NoSignals],
+                duration: start.elapsed(),
+            };
+        }
+
         let mut join_set = JoinSet::new();
 
         for signal in &self.signals {
@@ -238,6 +256,36 @@ mod tests {
         assert_eq!(result.results.len(), 4);
         // Serial execution of 4 x 25ms >= 100ms
         assert!(result.duration >= Duration::from_millis(90));
+    }
+
+    #[tokio::test]
+    async fn empty_pipeline_reports_no_signals() {
+        let pipeline = Pipeline::new(vec![], 4, Duration::from_secs(1));
+
+        let result = pipeline.evaluate(&make_ctx()).await;
+        assert!(result.results.is_empty());
+        assert_eq!(result.errors.len(), 1);
+        assert!(matches!(&result.errors[0], PipelineError::NoSignals));
+        assert!(result.errors[0]
+            .to_string()
+            .contains("no registered signals"));
+    }
+
+    #[tokio::test]
+    async fn populated_pipeline_reports_no_no_signals_error() {
+        let pipeline = Pipeline::new(
+            vec![Box::new(MockSignal {
+                label: "a".into(),
+                delay: Duration::ZERO,
+                fail: false,
+            })],
+            4,
+            Duration::from_secs(1),
+        );
+
+        let result = pipeline.evaluate(&make_ctx()).await;
+        assert_eq!(result.results.len(), 1);
+        assert!(result.errors.is_empty());
     }
 
     #[tokio::test]

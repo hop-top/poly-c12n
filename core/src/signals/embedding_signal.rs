@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::chain::Chain;
 use crate::embedding::EmbeddingEngine;
 use crate::prototype::PrototypeBank;
 use crate::signal::Signal;
@@ -22,12 +23,21 @@ pub struct EmbeddingSignalConfig {
 
 pub struct EmbeddingSignal {
     config: EmbeddingSignalConfig,
-    engine: Arc<dyn EmbeddingEngine>,
+    engines: Chain<dyn EmbeddingEngine>,
 }
 
 impl EmbeddingSignal {
+    /// Single-engine constructor, preserved for backward compatibility.
+    /// Equivalent to a one-element chain.
     pub fn new(config: EmbeddingSignalConfig, engine: Arc<dyn EmbeddingEngine>) -> Self {
-        Self { config, engine }
+        Self::with_chain(config, Chain::single(engine))
+    }
+
+    /// Tiered constructor. `EmbeddingEngine` is scalar, so [`Chain::new`]
+    /// only accepts `FallbackOnError`. Tiers must agree on dimensionality —
+    /// see [`Chain::validate_dimensions`].
+    pub fn with_chain(config: EmbeddingSignalConfig, engines: Chain<dyn EmbeddingEngine>) -> Self {
+        Self { config, engines }
     }
 }
 
@@ -38,11 +48,10 @@ impl Signal for EmbeddingSignal {
             return Err(SignalError::InvalidInput("empty input text".to_string()));
         }
 
-        let embedding = self
-            .engine
-            .embed(&ctx.text)
-            .await
-            .map_err(|e| SignalError::Inference(e.to_string()))?;
+        let outcome = self.engines.embed(&ctx.text).await?;
+        let embedding = outcome.value;
+        let mut base_metadata = HashMap::new();
+        outcome.provenance.write_metadata(&mut base_metadata);
 
         // Score each rule against the query embedding.
         let mut scored: Vec<(usize, f64)> = Vec::with_capacity(self.config.rules.len());
@@ -59,7 +68,7 @@ impl Signal for EmbeddingSignal {
                     signal_type: SignalType::Embedding,
                     confidence: score,
                     labels: vec![rule.label.clone()],
-                    metadata: HashMap::new(),
+                    metadata: base_metadata,
                 });
             }
 
@@ -91,7 +100,7 @@ impl Signal for EmbeddingSignal {
             signal_type: SignalType::Embedding,
             confidence: best_score,
             labels,
-            metadata: HashMap::new(),
+            metadata: base_metadata,
         })
     }
 

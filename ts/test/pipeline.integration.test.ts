@@ -85,7 +85,11 @@ describe('Pipeline real wasm — roundtrip', () => {
       expect(Array.isArray(parsed.errors)).toBe(true);
       expect(typeof parsed.duration_ms).toBe('number');
       expect(parsed.results).toEqual([]);
-      expect(parsed.errors).toEqual([]);
+      // A pipeline with no registered signals now reports that loudly rather
+      // than returning a silently-empty envelope. The wasm surface registers
+      // no signals, so exactly one `NoSignals` error is expected here.
+      expect(parsed.errors).toHaveLength(1);
+      expect(String((parsed.errors as unknown[])[0])).toMatch(/no registered signals/);
       expect(parsed.duration_ms as number).toBeGreaterThanOrEqual(0);
     } finally {
       pipeline.close();
@@ -106,8 +110,10 @@ describe('Pipeline real wasm — roundtrip', () => {
       const result = parseResult(raw);
       // Empty pipeline → empty results → confidence() === 0 by docs.
       expect(result.confidence()).toBe(0);
-      expect(result.hasErrors()).toBe(false);
       expect(result.results).toEqual([]);
+      // hasErrors() is now true for an unconfigured pipeline: the engine
+      // reports `NoSignals` rather than returning a silent empty envelope.
+      expect(result.hasErrors()).toBe(true);
     } finally {
       pipeline.close();
     }
@@ -171,7 +177,9 @@ describe('normalizeContext — wasm-side acceptance', () => {
       // serde-wasm-bindgen. If the Rust side were strict about
       // null-vs-empty, this call would throw.
       const raw = pipeline.evaluate(ctx);
-      expect(JSON.parse(raw)).toMatchObject({ results: [], errors: [] });
+      // `errors` carries the no-signals diagnostic; `results` staying empty is
+      // what this test is actually about.
+      expect(JSON.parse(raw)).toMatchObject({ results: [] });
     } finally {
       pipeline.close();
     }
@@ -191,7 +199,9 @@ describe('normalizeContext — wasm-side acceptance', () => {
       const raw = pipeline.evaluate(ctx);
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       expect(parsed.results).toEqual([]);
-      expect(parsed.errors).toEqual([]);
+      // No signals registered on the wasm surface — see the no-signals
+      // diagnostic asserted in the roundtrip suite above.
+      expect(parsed.errors).toHaveLength(1);
     } finally {
       pipeline.close();
     }
@@ -318,12 +328,11 @@ describe('cross-surface parity (JSON shape)', () => {
 
         // Python wire shape (from py/src/lib.rs:92-97):
         //   { "results": [...], "errors": [...], "duration_ms": <u64> }
-        // Empty pipeline yields:
-        const expectedPythonShape = {
-          results: [],
-          errors: [],
-        };
-        expect(parsed).toMatchObject(expectedPythonShape);
+        // This test is about the SHAPE, not the contents: `errors` is now
+        // non-empty for a zero-signal pipeline on every binding alike, so
+        // assert its type rather than its emptiness.
+        expect(parsed).toMatchObject({ results: [] });
+        expect(Array.isArray(parsed.errors)).toBe(true);
         expect(typeof parsed.duration_ms).toBe('number');
         expect((parsed.duration_ms as number) >= 0).toBe(true);
       } finally {
@@ -356,7 +365,9 @@ describe('cross-surface parity (JSON shape)', () => {
         const keysSorted = Object.keys(parsed).sort();
         expect(keysSorted).toEqual(['duration_ms', 'errors', 'results']);
         expect(parsed.results).toEqual([]);
-        expect(parsed.errors).toEqual([]);
+        // Structural parity is the point here — `errors` is an array on both
+        // sides. Its contents differ by configuration, not by binding.
+        expect(Array.isArray(parsed.errors)).toBe(true);
       } finally {
         pipeline.close();
       }
