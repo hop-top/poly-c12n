@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	c12n "hop.top/c12n"
+	"hop.top/kit/go/console/cli"
 	"hop.top/kit/go/console/markdown"
 	"hop.top/kit/go/console/output"
 )
@@ -48,6 +49,20 @@ func signalsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "signals",
 		Short: "List and inspect classification signal types",
+		Long: `List every classification signal c12n knows about and whether it is on.
+
+A signal is one scorer in the classification pipeline — keyword matching,
+PII detection, jailbreak detection, sentiment, and so on. The ENABLED
+column reflects your resolved config, so this is the fastest way to
+answer "why did classify not report X?".
+
+  c12n signals             all signal types, enabled or not
+  c12n signals --enabled   only the ones that will actually run
+  c12n signals inspect pii thresholds and model paths for one signal
+
+Enabled here means "config turned it on". A model-backed signal can be
+enabled and still not produce output in a stub build, or when its model
+file is missing — 'c12n doctor' is what distinguishes those cases.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg := ConfigFromContext(cmd)
 			enabled := make(map[c12n.SignalType]bool)
@@ -86,13 +101,34 @@ func signalsCmd() *cobra.Command {
 
 	cmd.AddCommand(signalInspectCmd())
 
+	// signals is runnable AND carries a subcommand, so kit's shape pass
+	// still treats it as a depth-1 verb needing this annotation. It is
+	// not a leaf, so the side-effect/idempotent pair is not required
+	// here — those live on `signals inspect`.
+	cli.SetTopLevelVerb(cmd)
+
 	return cmd
 }
 
 func signalInspectCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "inspect <signal>",
-		Short:             "Show detailed config for a signal type",
+		Use:   "inspect <signal>",
+		Short: "Show detailed config for a signal type",
+		Long: `Show the resolved configuration for one classification signal.
+
+Renders the signal's description, whether config has it enabled, and the
+tuning knobs that apply to it — thresholds, strategies, and model paths,
+as resolved from all config layers:
+
+  c12n signals inspect keyword
+  c12n signals inspect embedding
+
+Signals with no tunable settings show only description and enabled state;
+that is expected, not a lookup failure. An unrecognized signal name is an
+error — run 'c12n signals' for the valid set.
+
+The model path shown is what config points at, not proof that the file
+exists. Use 'c12n doctor' to verify model paths actually resolve.`,
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeSignalNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -130,6 +166,11 @@ func signalInspectCmd() *cobra.Command {
 			return nil
 		},
 	}
+
+	// Renders resolved config for one signal. Read-only.
+	cli.SetSideEffect(cmd, cli.SideEffectRead)
+	cli.SetIdempotency(cmd, cli.IdempotencyYes)
+
 	return cmd
 }
 

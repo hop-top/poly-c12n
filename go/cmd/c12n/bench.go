@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	c12n "hop.top/c12n"
+	"hop.top/kit/go/console/cli"
 )
 
 // benchRecord is a ben-compatible JSONL entry.
@@ -50,9 +51,9 @@ classification pipeline.`,
 				return fmt.Errorf("--iterations must be >= 1, got %d", iterations)
 			}
 
-			pipeline := PipelineFromContext(cmd)
-			if pipeline == nil {
-				return fmt.Errorf("pipeline not available")
+			pipeline, err := RequirePipeline(cmd)
+			if err != nil {
+				return err
 			}
 
 			// Build input contexts.
@@ -108,6 +109,20 @@ classification pipeline.`,
 		"Number of concurrent workers")
 	cmd.Flags().StringVarP(&outputPath, "output", "o", "",
 		"Write ben-compatible JSONL to file")
+
+	// write-local, not read: with -o the command truncates and rewrites
+	// the named path via os.Create. The classification work itself is
+	// read-only, but the annotation has to describe the worst case an
+	// agent can trigger, and that worst case clobbers a local file.
+	// Scope is the caller's working directory — never shared infra —
+	// hence write-local rather than write.
+	//
+	// Idempotent: re-running rewrites the same file rather than
+	// appending or minting new state. Latency numbers differ run to
+	// run, but the observable end state does not.
+	cli.SetSideEffect(cmd, cli.SideEffectWriteLocal)
+	cli.SetIdempotency(cmd, cli.IdempotencyYes)
+	cli.SetTopLevelVerb(cmd)
 
 	return cmd
 }

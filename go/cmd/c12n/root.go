@@ -19,15 +19,35 @@ import (
 type contextKey string
 
 const (
-	pipelineKey   contextKey = "pipeline"
-	configKey     contextKey = "config"
-	configOptsKey contextKey = "configOpts"
+	pipelineKey    contextKey = "pipeline"
+	pipelineErrKey contextKey = "pipelineErr"
+	configKey      contextKey = "config"
+	configOptsKey  contextKey = "configOpts"
 )
 
 // PipelineFromContext retrieves the Pipeline stored in the cobra command context.
 func PipelineFromContext(cmd *cobra.Command) *c12n.Pipeline {
 	v, _ := cmd.Context().Value(pipelineKey).(*c12n.Pipeline)
 	return v
+}
+
+// RequirePipeline returns the Pipeline for commands that cannot run
+// without one, or an error explaining why it is unavailable.
+//
+// Pipeline construction is deliberately non-fatal in PersistentPreRunE
+// so read-only commands still work in a stub build; this is the
+// accessor that turns that soft failure back into a hard one, for the
+// commands that genuinely need an engine. It surfaces the underlying
+// cause (e.g. "native engine disabled") rather than a bare
+// "pipeline not available", which told the user nothing actionable.
+func RequirePipeline(cmd *cobra.Command) (*c12n.Pipeline, error) {
+	if p := PipelineFromContext(cmd); p != nil {
+		return p, nil
+	}
+	if err, _ := cmd.Context().Value(pipelineErrKey).(error); err != nil {
+		return nil, fmt.Errorf("pipeline not available: %w", err)
+	}
+	return nil, fmt.Errorf("pipeline not available")
 }
 
 // ConfigFromContext retrieves the Config stored in the cobra command context.
@@ -68,11 +88,24 @@ func rootConfigOptions() config.Options {
 // kit contract — global flag registration, PersistentPreRunE, hints — is
 // exercised the same way it is at runtime.
 func newRoot() (*cli.Root, error) {
+	// WithStatus mounts kit's reserved `c12n status` subcommand. Kit's
+	// validator requires the name to exist on the root; kit's own
+	// implementation already carries the annotations and Long the
+	// contract demands, so we mount it rather than hand-rolling one and
+	// re-deriving the conformance surface.
 	root := cli.New(cli.Config{
 		Name:    "c12n",
 		Version: version,
 		Short:   "LLM request classification engine",
-	})
+	}, cli.WithStatus(cli.StatusConfig{
+		ExtraEnvKeys: []string{"C12N_*", "CGO_ENABLED"},
+	}))
+
+	// c12n-specific status sections. Priority 1000+ keeps them after
+	// kit's own sections, per kit's band convention. Each provider must
+	// work in BOTH build modes: in a stub build the engine section says
+	// so plainly instead of erroring.
+	registerStatusProviders(root)
 
 	log := kitlog.New(root.Viper)
 
@@ -104,15 +137,29 @@ func newRoot() (*cli.Root, error) {
 			"signals", len(cfg.EnabledSignals()),
 			"concurrency", cfg.MaxConcurrency)
 
-		pipeline, err := c12n.NewPipeline(cfg.ToPipelineConfig())
-		if err != nil {
-			return fmt.Errorf("create pipeline: %w", err)
+		// Pipeline construction is best-effort, NOT a hard precondition.
+		//
+		// This hook runs for every command, but only classify and bench
+		// actually evaluate anything. Failing the whole invocation here
+		// meant that in a stub build (no -tags c12n_native, where
+		// NewPipeline always errors) every single subcommand exited 1 —
+		// including doctor, whose entire job is to diagnose a missing
+		// native engine, and status, which must report the engine as
+		// unavailable rather than die with it.
+		//
+		// The error is kept and surfaced by the commands that need a
+		// pipeline; PipelineFromContext already returns nil for its
+		// consumers, and they check for it.
+		pipeline, perr := c12n.NewPipeline(cfg.ToPipelineConfig())
+		if perr != nil {
+			log.Debug("pipeline unavailable", "err", perr)
 		}
 
 		// Store config, opts, and pipeline in context for subcommands.
 		newCtx := context.WithValue(cmd.Context(), configKey, cfg)
 		newCtx = context.WithValue(newCtx, configOptsKey, opts)
 		newCtx = context.WithValue(newCtx, pipelineKey, pipeline)
+		newCtx = context.WithValue(newCtx, pipelineErrKey, perr)
 		cmd.SetContext(newCtx)
 
 		return nil

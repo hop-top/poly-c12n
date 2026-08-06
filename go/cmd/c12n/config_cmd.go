@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	c12n "hop.top/c12n"
+	"hop.top/kit/go/console/cli"
 	"hop.top/kit/go/console/output"
 	"hop.top/kit/go/core/config"
 	"hop.top/kit/go/core/config/pkl"
@@ -31,7 +32,21 @@ func configGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <key>",
 		Short: "Get a config value",
-		Args:  cobra.ExactArgs(1),
+		Long: `Print the effective value of a single config key.
+
+"Effective" means the value c12n would actually use, after layering all
+config sources in precedence order: built-in defaults, then the system
+file (/etc/c12n/config.yaml), then the user file, then the project file
+(./.c12n.yaml), then C12N_* environment variables, then any -c overrides
+passed on the command line.
+
+  c12n config get keyword.threshold
+
+Only the resolved value is printed, with no indication of which layer it
+came from. Use 'c12n config list' when you need to see the layer a value
+originated in, or 'c12n doctor' when you need to know which files were
+found at all. Unknown keys are an error rather than an empty result.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts := ConfigOptsFromContext(cmd)
 			val, err := config.Get(args[0], opts)
@@ -43,6 +58,11 @@ func configGetCmd() *cobra.Command {
 		},
 		ValidArgsFunction: completeKeys,
 	}
+
+	// Resolves and prints one key. No file is opened for writing.
+	cli.SetSideEffect(cmd, cli.SideEffectRead)
+	cli.SetIdempotency(cmd, cli.IdempotencyYes)
+
 	return cmd
 }
 
@@ -52,7 +72,28 @@ func configSetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set <key> <value>",
 		Short: "Set a config value",
-		Args:  cobra.ExactArgs(2),
+		Long: `Write a single config key into one config layer.
+
+--scope selects which file is edited; it defaults to project, so the key
+lands in ./.c12n.yaml unless you say otherwise:
+
+  c12n config set keyword.threshold 0.8
+  c12n config set keyword.threshold 0.8 --scope user
+
+Only the named key is rewritten — the rest of the target file is left
+alone, so this is safe to run against a config you edited by hand.
+
+Caveats:
+
+  - Writing to a lower-precedence layer may have no visible effect. If
+    the project file also sets the key, 'config set --scope user' will
+    appear to do nothing, because the project layer still wins. Confirm
+    with 'c12n config get'.
+  - --scope system writes /etc/c12n/config.yaml, affecting every user on
+    the machine, and usually needs elevated privileges.
+  - The value is validated against c12n's config schema; an out-of-range
+    or misspelled key is rejected rather than written.`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts := ConfigOptsFromContext(cmd)
 			scope, err := parseConfigScope(scopeStr)
@@ -85,6 +126,17 @@ func configSetCmd() *cobra.Command {
 				cobra.ShellCompDirectiveNoFileComp
 		})
 
+	// write for the same reason as init: --scope can name the system
+	// file, so the reachable blast radius is shared, not CWD-local.
+	//
+	// Not destructive — it rewrites one key and preserves the rest of
+	// the file, so nothing unrelated is lost.
+	//
+	// Idempotent: setting the same key to the same value twice leaves
+	// the file in the same state.
+	cli.SetSideEffect(cmd, cli.SideEffectWrite)
+	cli.SetIdempotency(cmd, cli.IdempotencyYes)
+
 	return cmd
 }
 
@@ -97,7 +149,20 @@ func configListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List config entries",
-		Args:  cobra.NoArgs,
+		Long: `List config entries with the scope each one was set in.
+
+Unlike 'config get', which collapses the layers into one answer, list
+shows the SCOPE column so you can see where a value actually came from
+and why an edit in another layer had no effect:
+
+  c12n config list                  every entry, all scopes
+  c12n config list --scope project  only entries from ./.c12n.yaml
+  c12n config list -f json          machine-readable
+
+Entries are the keys explicitly present in a config file. Keys left at
+their built-in default do not appear here — an empty listing means no
+config file set anything, not that c12n has no configuration.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			opts := ConfigOptsFromContext(cmd)
 			entries, err := config.List(opts)
@@ -153,6 +218,10 @@ func configListCmd() *cobra.Command {
 			return []string{"json", "table", "yaml"},
 				cobra.ShellCompDirectiveNoFileComp
 		})
+
+	// Enumerates existing entries; opens config files read-only.
+	cli.SetSideEffect(cmd, cli.SideEffectRead)
+	cli.SetIdempotency(cmd, cli.IdempotencyYes)
 
 	return cmd
 }

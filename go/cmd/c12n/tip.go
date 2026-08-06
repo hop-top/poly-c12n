@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	c12n "hop.top/c12n"
+	"hop.top/kit/go/console/cli"
 )
 
 // ContextEnvelope is the JSON input for the tip suggest command.
@@ -49,10 +50,26 @@ func tipCmd() *cobra.Command {
 }
 
 func tipSuggestCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "suggest",
 		Short: "Suggest corrections for common input mistakes",
-		Long:  "Reads a JSON ContextEnvelope from stdin, returns corrections to stdout.",
+		Long: `Map a mistyped signal, format, or subcommand name to what was meant.
+
+Reads a JSON ContextEnvelope on stdin and writes corrections to stdout.
+Any subset of the three fields may be present:
+
+  echo '{"signal":"jailbrek"}' | c12n tip suggest
+  echo '{"subcommand":"clasify","format":"jsn"}' | c12n tip suggest
+
+Matching is by Levenshtein distance against the known names. A field
+that already holds a valid name produces no correction, so an empty
+corrections array means "your input was fine". When nothing is close
+enough, the correction carries an empty suggestion and a reason
+explaining that the name is unrecognized.
+
+Built for the error-recovery path of agents and shell wrappers rather
+than for direct human use. It is advisory only: it never runs the
+corrected command and never edits config.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			var env ContextEnvelope
 			if err := json.NewDecoder(cmd.InOrStdin()).Decode(&env); err != nil {
@@ -82,6 +99,14 @@ func tipSuggestCmd() *cobra.Command {
 			return enc.Encode(resp)
 		},
 	}
+
+	// Pure function of stdin: string-distance matching against
+	// in-binary name lists. Nothing is persisted, no config is read,
+	// and the suggested command is never executed.
+	cli.SetSideEffect(cmd, cli.SideEffectRead)
+	cli.SetIdempotency(cmd, cli.IdempotencyYes)
+
+	return cmd
 }
 
 func matchSignal(input string) *Correction {

@@ -7,14 +7,33 @@ import (
 	"github.com/spf13/cobra"
 
 	c12n "hop.top/c12n"
+	"hop.top/kit/go/console/cli"
 	"hop.top/kit/go/core/config"
 	"hop.top/kit/go/core/uxp"
 )
 
 func doctorCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Run diagnostic checks on the c12n environment",
+		Long: `Check that this c12n installation is wired up correctly.
+
+Three checks run:
+
+  config-file    Does a config layer exist, and does it parse? Reports
+                 WARN (not FAIL) when no config is found at all, since
+                 c12n runs on built-in defaults without one.
+  model-paths    For every model-backed signal that config enables, does
+                 the referenced model file exist on disk? Signals that
+                 are disabled are skipped, so a SKIP here means "nothing
+                 to check", not "nothing works".
+  native-engine  Was this binary built with -tags c12n_native? A stub
+                 build reports WARN: it starts and classifies, but the
+                 model-backed signals cannot run.
+
+Run this first when classification returns fewer signals than expected.
+doctor only reads — it never repairs, and never writes a config file.
+Exit status is 0 even when checks report WARN or FAIL; read the output.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg := ConfigFromContext(cmd)
 			opts := ConfigOptsFromContext(cmd)
@@ -155,6 +174,15 @@ func doctorCmd() *cobra.Command {
 			return nil
 		},
 	}
+
+	// Diagnostics only. Every check is a stat or an in-memory config
+	// parse; doctor deliberately does not offer a --fix, so there is no
+	// mutating path an agent could trip into.
+	cli.SetSideEffect(cmd, cli.SideEffectRead)
+	cli.SetIdempotency(cmd, cli.IdempotencyYes)
+	cli.SetTopLevelVerb(cmd)
+
+	return cmd
 }
 
 // fileExists reports whether path points to an existing file.
