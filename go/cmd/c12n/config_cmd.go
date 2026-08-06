@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
 	c12n "hop.top/c12n"
 	"hop.top/kit/go/console/cli"
@@ -100,7 +104,20 @@ Caveats:
 			if err != nil {
 				return err
 			}
-			return config.Set(args[0], args[1], scope, opts)
+			key, value := args[0], args[1]
+
+			schema, err := c12n.ConfigSchema()
+			if err != nil {
+				return fmt.Errorf("config set: load schema: %w", err)
+			}
+			if err := pkl.ValidateValue(schema, key, value); err != nil {
+				return err
+			}
+
+			if err := config.Set(key, value, scope, opts); err != nil {
+				return err
+			}
+			return retypeConfigScalar(schema, key, value, scope, opts)
 		},
 		ValidArgsFunction: func(
 			cmd *cobra.Command,
@@ -227,6 +244,128 @@ config file set anything, not that c12n has no configuration.`,
 }
 
 // --- helpers ---
+
+// yamlTagForField maps a schema field type to the YAML tag the scalar
+// must carry on disk. Numeric and boolean keys get their native tag so
+// the emitter writes them bare (0.9, not "0.9"); everything else stays
+// !!str, which also keeps YAML-1.1 lookalikes such as "yes" or "on"
+// quoted instead of silently decoding as booleans.
+func yamlTagForField(t pkl.FieldType) string {
+	switch t {
+	case pkl.TypeInt:
+		return "!!int"
+	case pkl.TypeFloat:
+		return "!!float"
+	case pkl.TypeBool:
+		return "!!bool"
+	default:
+		return "!!str"
+	}
+}
+
+// retypeConfigScalar rewrites the tag of the scalar just written by
+// config.Set.
+//
+// kit's config.Set hard-codes Tag: "!!str" on every value it writes, so
+// a float key lands as keyword_threshold: "0.9". Config is loaded in
+// PersistentPreRunE, so that quoted scalar then fails to unmarshal into
+// float64 and every later invocation — doctor included — aborts before
+// it runs, leaving hand-editing the YAML as the only way out.
+//
+// Until kit grows a type-aware setter, c12n repairs the tag itself using
+// the type its own PKL schema declares for the key.
+func retypeConfigScalar(
+	schema *pkl.Schema,
+	key, value string,
+	scope config.Scope,
+	opts config.Options,
+) error {
+	var field *pkl.FieldDef
+	for i := range schema.Fields {
+		if schema.Fields[i].Path == key {
+			field = &schema.Fields[i]
+			break
+		}
+	}
+	if field == nil {
+		return nil
+	}
+
+	tag := yamlTagForField(field.Type)
+	if tag == "!!str" {
+		// Already what config.Set wrote; nothing to repair.
+		return nil
+	}
+
+	path, err := config.ScopePath(opts, scope)
+	if err != nil {
+		return err
+	}
+
+	data, err := os.ReadFile(path) //nolint:gosec // path from config scope
+	if err != nil {
+		return fmt.Errorf("config set: reread %s: %w", path, err)
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return fmt.Errorf("config set: reparse %s: %w", path, err)
+	}
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return nil
+	}
+
+	node := findScalarNode(doc.Content[0], strings.Split(key, "."))
+	if node == nil {
+		return nil
+	}
+	node.Tag = tag
+	node.Value = value
+	node.Style = 0
+
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&doc); err != nil {
+		return fmt.Errorf("config set: reencode %s: %w", path, err)
+	}
+	if err := enc.Close(); err != nil {
+		return fmt.Errorf("config set: reencode %s: %w", path, err)
+	}
+	// config.Set already created the file, so os.WriteFile keeps the
+	// mode it chose; the perm argument only applies to a create that
+	// cannot happen here.
+	if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
+		return fmt.Errorf("config set: rewrite %s: %w", path, err)
+	}
+	return nil
+}
+
+// findScalarNode walks a dotted key path through nested mappings and
+// returns the value node for the final segment, or nil if absent.
+func findScalarNode(mapping *yaml.Node, segments []string) *yaml.Node {
+	cur := mapping
+	for i, seg := range segments {
+		if cur == nil || cur.Kind != yaml.MappingNode {
+			return nil
+		}
+		var next *yaml.Node
+		for j := 0; j+1 < len(cur.Content); j += 2 {
+			if cur.Content[j].Value == seg {
+				next = cur.Content[j+1]
+				break
+			}
+		}
+		if next == nil {
+			return nil
+		}
+		if i == len(segments)-1 {
+			return next
+		}
+		cur = next
+	}
+	return nil
+}
 
 func parseConfigScope(s string) (config.Scope, error) {
 	switch s {
