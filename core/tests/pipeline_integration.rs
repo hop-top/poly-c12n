@@ -195,10 +195,13 @@ async fn pipeline_concurrency() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn empty_pipeline() {
+async fn empty_pipeline_reports_no_signals() {
     let pipeline = Pipeline::new(vec![], 4, Duration::from_secs(1));
     let result = pipeline.evaluate(&make_ctx("nothing")).await;
 
     assert!(result.results.is_empty());
-    assert!(result.errors.is_empty());
+    assert_eq!(result.errors.len(), 1);
+    assert!(result.errors[0]
+        .to_string()
+        .contains("no registered signals"));
 }
