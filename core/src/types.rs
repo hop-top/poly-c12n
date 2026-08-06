@@ -88,6 +88,14 @@ mod tests {
     }
 }
 
+/// Embedding failures surface to signals as inference errors. Matches the
+/// mapping the signal implementations applied by hand before chains existed.
+impl From<crate::embedding::EmbeddingError> for SignalError {
+    fn from(e: crate::embedding::EmbeddingError) -> Self {
+        SignalError::Inference(e.to_string())
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum SignalError {
     #[error("signal evaluation timed out")]

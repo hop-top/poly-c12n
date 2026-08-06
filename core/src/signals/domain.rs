@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::chain::Chain;
 use crate::signal::Signal;
 use crate::types::{ClassificationContext, SignalError, SignalResult, SignalType};
 
@@ -47,7 +48,7 @@ pub trait CategoryClassifier: Send + Sync {
 
 pub struct DomainSignal {
     name: String,
-    classifier: Arc<dyn CategoryClassifier>,
+    chain: Chain<dyn CategoryClassifier>,
     /// Shannon entropy below this threshold => single confident label.
     entropy_threshold: f64,
     /// Ignore categories with probability below this value.
@@ -55,15 +56,32 @@ pub struct DomainSignal {
 }
 
 impl DomainSignal {
+    /// Single-classifier constructor, preserved for backward compatibility.
+    /// Equivalent to a one-element chain.
     pub fn new(
         name: impl Into<String>,
         classifier: Arc<dyn CategoryClassifier>,
         entropy_threshold: f64,
         min_probability: f64,
     ) -> Self {
+        Self::with_chain(
+            name,
+            Chain::single(classifier),
+            entropy_threshold,
+            min_probability,
+        )
+    }
+
+    /// Tiered constructor.
+    pub fn with_chain(
+        name: impl Into<String>,
+        chain: Chain<dyn CategoryClassifier>,
+        entropy_threshold: f64,
+        min_probability: f64,
+    ) -> Self {
         Self {
             name: name.into(),
-            classifier,
+            chain,
             entropy_threshold,
             min_probability,
         }
@@ -96,7 +114,8 @@ impl Signal for DomainSignal {
             return Err(SignalError::InvalidInput("empty text".into()));
         }
 
-        let distribution = self.classifier.classify(&ctx.text).await?;
+        let outcome = self.chain.classify(&ctx.text).await?;
+        let distribution = outcome.value;
         if distribution.is_empty() {
             return Err(SignalError::Inference(
                 "classifier returned empty distribution".into(),
@@ -143,6 +162,7 @@ impl Signal for DomainSignal {
             "distribution".into(),
             serde_json::to_value(dist_map).unwrap_or(serde_json::Value::Null),
         );
+        outcome.provenance.write_metadata(&mut metadata);
 
         Ok(SignalResult {
             name: self.name.clone(),

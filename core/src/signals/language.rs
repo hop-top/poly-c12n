@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::chain::Chain;
 use crate::signal::Signal;
 use crate::types::{ClassificationContext, SignalError, SignalResult, SignalType};
 
@@ -21,14 +22,21 @@ pub trait LanguageDetector: Send + Sync {
 
 pub struct LanguageSignal {
     name: String,
-    detector: Arc<dyn LanguageDetector>,
+    chain: Chain<dyn LanguageDetector>,
 }
 
 impl LanguageSignal {
+    /// Single-detector constructor, preserved for backward compatibility.
+    /// Equivalent to a one-element chain.
     pub fn new(name: impl Into<String>, detector: Arc<dyn LanguageDetector>) -> Self {
+        Self::with_chain(name, Chain::single(detector))
+    }
+
+    /// Tiered constructor.
+    pub fn with_chain(name: impl Into<String>, chain: Chain<dyn LanguageDetector>) -> Self {
         Self {
             name: name.into(),
-            detector,
+            chain,
         }
     }
 }
@@ -36,8 +44,8 @@ impl LanguageSignal {
 #[async_trait]
 impl Signal for LanguageSignal {
     async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
-        let primary = self.detector.detect(&ctx.text);
-        let all = self.detector.detect_multiple(&ctx.text);
+        let outcome = self.chain.detect(&ctx.text);
+        let (primary, all) = outcome.value;
 
         let (labels, confidence) = match &primary {
             Some(lang) => (vec![lang.code.clone()], lang.confidence),
@@ -69,6 +77,7 @@ impl Signal for LanguageSignal {
             .collect();
         metadata.insert("detected_languages".into(), serde_json::json!(detected));
         metadata.insert("language_count".into(), serde_json::json!(all.len()));
+        outcome.provenance.write_metadata(&mut metadata);
 
         Ok(SignalResult {
             name: self.name.clone(),

@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::chain::Chain;
 use crate::embedding::EmbeddingEngine;
 use crate::prototype::PrototypeBank;
 use crate::signal::Signal;
@@ -12,11 +13,13 @@ pub struct ComplexitySignal {
     name: String,
     hard_bank: PrototypeBank,
     easy_bank: PrototypeBank,
-    engine: Arc<dyn EmbeddingEngine>,
+    engines: Chain<dyn EmbeddingEngine>,
     margin: f64,
 }
 
 impl ComplexitySignal {
+    /// Single-engine constructor, preserved for backward compatibility.
+    /// Equivalent to a one-element chain.
     pub fn new(
         name: impl Into<String>,
         hard_bank: PrototypeBank,
@@ -24,11 +27,23 @@ impl ComplexitySignal {
         engine: Arc<dyn EmbeddingEngine>,
         margin: f64,
     ) -> Self {
+        Self::with_chain(name, hard_bank, easy_bank, Chain::single(engine), margin)
+    }
+
+    /// Tiered constructor. `EmbeddingEngine` is scalar, so [`Chain::new`]
+    /// only accepts `FallbackOnError`.
+    pub fn with_chain(
+        name: impl Into<String>,
+        hard_bank: PrototypeBank,
+        easy_bank: PrototypeBank,
+        engines: Chain<dyn EmbeddingEngine>,
+        margin: f64,
+    ) -> Self {
         Self {
             name: name.into(),
             hard_bank,
             easy_bank,
-            engine,
+            engines,
             margin,
         }
     }
@@ -37,11 +52,8 @@ impl ComplexitySignal {
 #[async_trait]
 impl Signal for ComplexitySignal {
     async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
-        let embedding = self
-            .engine
-            .embed(&ctx.text)
-            .await
-            .map_err(|e| SignalError::Inference(e.to_string()))?;
+        let outcome = self.engines.embed(&ctx.text).await?;
+        let embedding = outcome.value;
 
         let hard_score = self
             .hard_bank
@@ -65,6 +77,7 @@ impl Signal for ComplexitySignal {
         metadata.insert("hard_score".into(), serde_json::Value::from(hard_score));
         metadata.insert("easy_score".into(), serde_json::Value::from(easy_score));
         metadata.insert("margin".into(), serde_json::Value::from(self.margin));
+        outcome.provenance.write_metadata(&mut metadata);
 
         Ok(SignalResult {
             name: self.name.clone(),

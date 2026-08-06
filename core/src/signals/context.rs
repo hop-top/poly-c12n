@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::chain::Chain;
 use crate::signal::Signal;
 use crate::types::{ClassificationContext, SignalError, SignalResult, SignalType};
 
@@ -20,21 +21,34 @@ pub struct ModelPricing {
 
 pub struct ContextSignal {
     name: String,
-    tokenizer: Arc<dyn Tokenizer>,
+    chain: Chain<dyn Tokenizer>,
     output_ratio: f64,
     pricing: Vec<ModelPricing>,
 }
 
 impl ContextSignal {
+    /// Single-tokenizer constructor, preserved for backward compatibility.
+    /// Equivalent to a one-element chain.
     pub fn new(
         name: impl Into<String>,
         tokenizer: Arc<dyn Tokenizer>,
         output_ratio: f64,
         pricing: Vec<ModelPricing>,
     ) -> Self {
+        Self::with_chain(name, Chain::single(tokenizer), output_ratio, pricing)
+    }
+
+    /// Tiered constructor. `Tokenizer` has no confidence signal, so
+    /// [`Chain::new`] only accepts `FallbackOnError` for this trait.
+    pub fn with_chain(
+        name: impl Into<String>,
+        chain: Chain<dyn Tokenizer>,
+        output_ratio: f64,
+        pricing: Vec<ModelPricing>,
+    ) -> Self {
         Self {
             name: name.into(),
-            tokenizer,
+            chain,
             output_ratio,
             pricing,
         }
@@ -53,7 +67,8 @@ impl ContextSignal {
 #[async_trait]
 impl Signal for ContextSignal {
     async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
-        let input_tokens = self.tokenizer.count_tokens(&ctx.text);
+        let outcome = self.chain.count_tokens(&ctx.text);
+        let input_tokens = outcome.value;
         let estimated_output = (input_tokens as f64 * self.output_ratio).ceil() as usize;
 
         let label = Self::token_label(input_tokens);
@@ -80,9 +95,10 @@ impl Signal for ContextSignal {
         );
         metadata.insert(
             "tokenizer_model".into(),
-            serde_json::json!(self.tokenizer.model_name()),
+            serde_json::json!(self.chain.model_name()),
         );
         metadata.insert("costs".into(), serde_json::json!(costs));
+        outcome.provenance.write_metadata(&mut metadata);
 
         Ok(SignalResult {
             name: self.name.clone(),
