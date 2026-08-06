@@ -56,6 +56,12 @@ single relevant binding (the CLI stories) list just that one.
 | [US-0013](US-0013-tiered-detector-chains.md) | Trade cost against accuracy with tiered detector chains | `partial` | same |
 | [US-0014](US-0014-detector-registry-by-name.md) | Build detector chains from configuration names | `partial` | same |
 | [US-0015](US-0015-no-signals-diagnostic.md) | Learn that a pipeline has no signals registered | `shipped` | — |
+| [US-0020](US-0020-php-install-load.md) | Install and load the PHP binding | `shipped` | — |
+| [US-0021](US-0021-php-evaluate-parse.md) | Evaluate a context and parse the result in PHP | `shipped` | — |
+| [US-0022](US-0022-php-no-signals.md) | Handle errors and the NoSignals diagnostic in PHP | `partial` | no option makes a signal fire from PHP |
+| [US-0023](US-0023-ts-install-entrypoint.md) | Install `@hop-top/c12n` and pick the right entrypoint | `shipped` | — |
+| [US-0024](US-0024-ts-evaluate-parse.md) | Evaluate a context and parse the result in TypeScript | `shipped` | — |
+| [US-0025](US-0025-ts-no-signals.md) | Handle errors and the NoSignals diagnostic in TypeScript | `partial` | no option makes a signal fire from TS |
 
 The common root cause behind most of these: `evaluate` only scores
 signals registered at construction, and four of the five bindings
@@ -102,30 +108,3 @@ Story coverage for those bindings is being written separately.
 Test paths in each story are repo-root-relative (`go/e2e_test.go`, not
 `e2e_test.go`). Earlier revisions linked one directory too high and
 every link 404'd.
-
-## Build-mode note
-
-c12n ships two Go build modes, selected by the `c12n_native` build tag:
-
-- **default** (stub, regardless of `CGO_ENABLED`): config + parsing +
-  the command tree work; `NewPipeline` and `Pipeline.Evaluate` return
-  `errNativeDisabled`. Useful for tooling that consumes c12n types
-  without needing the engine.
-- **`-tags c12n_native`** (real, requires cgo): links
-  `libc12n_core.{so,dylib}` built from [`core/`](../../core/). Real
-  classification — subject to the signal-registration gap above.
-
-The native integration tests need `-tags "c12n_native integration"` and
-the cdylib on the library path:
-
-```bash
-cargo build -p hop-top-c12n-core
-cd go && CGO_ENABLED=1 \
-  CGO_LDFLAGS="-L$(cd .. && pwd)/target/debug" \
-  DYLD_LIBRARY_PATH="$(cd .. && pwd)/target/debug" \
-  go test -tags "c12n_native integration" ./...
-```
-
-The crate is `hop-top-c12n-core`; `cargo build -p c12n-core` fails.
-Two tests in that run currently fail — see
-[US-0007](US-0007-json-ffi-roundtrip.md).
