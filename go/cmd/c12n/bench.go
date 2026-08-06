@@ -102,7 +102,9 @@ classification pipeline.`,
 		"JSONL file with ClassificationContext objects (one per line)")
 	cmd.Flags().StringVarP(&signal, "signal", "s", "",
 		"Signal label for ben output (does not filter pipeline)")
-	cmd.Flags().IntVarP(&concurrency, "concurrency", "c", 1,
+	// No "c" shorthand: kit reserves -c/--config as a global persistent
+	// flag, and cobra panics when a subcommand shadows the shorthand.
+	cmd.Flags().IntVar(&concurrency, "concurrency", 1,
 		"Number of concurrent workers")
 	cmd.Flags().StringVarP(&outputPath, "output", "o", "",
 		"Write ben-compatible JSONL to file")

@@ -117,13 +117,39 @@ pub trait PiiDetector: Send + Sync {
 
 pub struct PiiSignal {
     chain: Chain<dyn PiiDetector>,
+    /// Entity types to report. An EMPTY set means "report every type the
+    /// detector finds" — it is not a filter that matches nothing. See
+    /// [`PiiSignal::is_flagged`].
     deny_list: HashSet<String>,
     max_chunk_size: usize,
 }
 
 impl PiiSignal {
+    /// Number of detected entities the deny list discarded. Always present in
+    /// `SignalResult::metadata` so a clean report is never silently wrong: a
+    /// caller seeing `confidence: 0.0` can check this key to learn that the
+    /// detector *did* find PII which the configured deny list dropped.
+    pub const SUPPRESSED_METADATA_KEY: &'static str = "entities_suppressed";
+
+    /// Entity types the deny list discarded, deduplicated and sorted.
+    /// Companion to [`Self::SUPPRESSED_METADATA_KEY`].
+    pub const SUPPRESSED_TYPES_METADATA_KEY: &'static str = "entity_types_suppressed";
+
+    /// Whether an entity type is reported.
+    ///
+    /// An empty deny list reports EVERY detected type. A deny list names what
+    /// to reject, so an empty one reads as "nothing configured yet", never as
+    /// "detect nothing" — a caller wanting no PII detection omits the signal
+    /// instead of wiring one that lies about clean text.
+    fn is_flagged(&self, entity_type: &str) -> bool {
+        self.deny_list.is_empty() || self.deny_list.contains(entity_type)
+    }
+
     /// Single-detector constructor, preserved for backward compatibility.
     /// Equivalent to a one-element chain.
+    ///
+    /// An empty `deny_list` reports all detected entity types; see
+    /// [`Self::is_flagged`].
     pub fn new(
         detector: Box<dyn PiiDetector>,
         deny_list: HashSet<String>,
@@ -137,6 +163,9 @@ impl PiiSignal {
     }
 
     /// Tiered constructor.
+    ///
+    /// An empty `deny_list` reports all detected entity types; see
+    /// [`Self::is_flagged`].
     pub fn with_chain(
         chain: Chain<dyn PiiDetector>,
         deny_list: HashSet<String>,
@@ -221,11 +250,12 @@ impl Signal for PiiSignal {
         }
         provenance.tiers_attempted.sort_unstable();
 
-        // Filter to denied entity types
-        let flagged: Vec<PiiEntity> = all_entities
+        // Partition into reported vs. suppressed. An empty deny list reports
+        // everything; a populated one drops the rest but never silently — the
+        // discarded count and types land in metadata below.
+        let (flagged, suppressed): (Vec<PiiEntity>, Vec<PiiEntity>) = all_entities
             .into_iter()
-            .filter(|e| self.deny_list.contains(&e.entity_type))
-            .collect();
+            .partition(|e| self.is_flagged(&e.entity_type));
 
         let confidence = if flagged.is_empty() {
             0.0
@@ -256,6 +286,22 @@ impl Signal for PiiSignal {
             "entities".to_string(),
             serde_json::Value::Array(entity_details),
         );
+
+        // Suppression is always visible, including the zero case, so a caller
+        // can distinguish "detector found nothing" from "deny list dropped it".
+        let mut suppressed_types: Vec<String> =
+            suppressed.iter().map(|e| e.entity_type.clone()).collect();
+        suppressed_types.sort_unstable();
+        suppressed_types.dedup();
+        metadata.insert(
+            Self::SUPPRESSED_METADATA_KEY.to_string(),
+            serde_json::Value::Number(serde_json::Number::from(suppressed.len())),
+        );
+        metadata.insert(
+            Self::SUPPRESSED_TYPES_METADATA_KEY.to_string(),
+            serde_json::json!(suppressed_types),
+        );
+
         provenance.write_metadata(&mut metadata);
 
         Ok(SignalResult {
@@ -501,6 +547,127 @@ mod tests {
         let result = signal.evaluate(&make_ctx("hello")).await.unwrap();
         assert_eq!(result.confidence, 0.0);
         assert!(result.labels.is_empty());
+        // Genuinely clean: nothing found, so nothing suppressed either.
+        assert_eq!(result.metadata[PiiSignal::SUPPRESSED_METADATA_KEY], 0);
+    }
+
+    fn pii_entity(kind: &str, confidence: f64) -> PiiEntity {
+        PiiEntity {
+            entity_type: kind.into(),
+            text: "redacted".into(),
+            start: 0,
+            end: 8,
+            confidence,
+        }
+    }
+
+    /// Regression: an empty deny list used to discard EVERY detected entity and
+    /// report a clean scan on text that plainly contains PII. Empty now means
+    /// "report all types".
+    #[tokio::test]
+    async fn pii_empty_deny_list_reports_all_detected_entities() {
+        let signal = PiiSignal::new(
+            Box::new(MockPiiDetector {
+                entities: vec![
+                    pii_entity("EMAIL", 0.99),
+                    pii_entity("CREDIT_CARD", 0.95),
+                    pii_entity("NAME", 0.70),
+                ],
+            }),
+            HashSet::new(),
+            4096,
+        );
+
+        let result = signal
+            .evaluate(&make_ctx("mail bob@example.com card 4111111111111111"))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result.confidence, 0.99,
+            "max confidence across all entities"
+        );
+        assert!(result.labels.contains(&"EMAIL".to_string()));
+        assert!(result.labels.contains(&"CREDIT_CARD".to_string()));
+        assert!(result.labels.contains(&"NAME".to_string()));
+        assert_eq!(result.metadata["entity_count"], 3);
+        assert_eq!(
+            result.metadata[PiiSignal::SUPPRESSED_METADATA_KEY],
+            0,
+            "no filter configured, so nothing is suppressed"
+        );
+    }
+
+    /// Every entity type the bundled regex detector emits survives the
+    /// empty-deny-list path rather than being silently dropped.
+    #[tokio::test]
+    async fn pii_each_entity_type_survives_empty_deny_list() {
+        for kind in ["EMAIL", "CREDIT_CARD", "PHONE", "SSN", "IP_ADDRESS", "NAME"] {
+            let signal = PiiSignal::new(
+                Box::new(MockPiiDetector {
+                    entities: vec![pii_entity(kind, 0.9)],
+                }),
+                HashSet::new(),
+                4096,
+            );
+            let result = signal.evaluate(&make_ctx("text")).await.unwrap();
+            assert_eq!(result.labels, vec![kind.to_string()], "{kind} reported");
+            assert_eq!(result.confidence, 0.9, "{kind} confidence surfaced");
+        }
+    }
+
+    /// Every entity type also survives when the deny list names it explicitly.
+    #[tokio::test]
+    async fn pii_each_entity_type_survives_explicit_deny_list() {
+        for kind in ["EMAIL", "CREDIT_CARD", "PHONE", "SSN", "IP_ADDRESS", "NAME"] {
+            let mut deny = HashSet::new();
+            deny.insert(kind.to_string());
+
+            let signal = PiiSignal::new(
+                Box::new(MockPiiDetector {
+                    entities: vec![pii_entity(kind, 0.9)],
+                }),
+                deny,
+                4096,
+            );
+            let result = signal.evaluate(&make_ctx("text")).await.unwrap();
+            assert_eq!(result.labels, vec![kind.to_string()], "{kind} reported");
+            assert_eq!(result.metadata[PiiSignal::SUPPRESSED_METADATA_KEY], 0);
+        }
+    }
+
+    /// A populated-but-incomplete deny list still suppresses, but the caller can
+    /// SEE it: a `confidence: 0.0` report carries a non-zero suppressed count
+    /// and the dropped types.
+    #[tokio::test]
+    async fn pii_suppression_is_visible_to_caller() {
+        let mut deny = HashSet::new();
+        deny.insert("SSN".to_string());
+
+        let signal = PiiSignal::new(
+            Box::new(MockPiiDetector {
+                entities: vec![
+                    pii_entity("EMAIL", 0.99),
+                    pii_entity("CREDIT_CARD", 0.95),
+                    pii_entity("EMAIL", 0.80),
+                ],
+            }),
+            deny,
+            4096,
+        );
+
+        let result = signal.evaluate(&make_ctx("text")).await.unwrap();
+
+        // Nothing matched the deny list, so the verdict is clean...
+        assert_eq!(result.confidence, 0.0);
+        assert!(result.labels.is_empty());
+        // ...but the clean verdict is not a lie: the drop is on the record.
+        assert_eq!(result.metadata[PiiSignal::SUPPRESSED_METADATA_KEY], 3);
+        assert_eq!(
+            result.metadata[PiiSignal::SUPPRESSED_TYPES_METADATA_KEY],
+            serde_json::json!(["CREDIT_CARD", "EMAIL"]),
+            "types deduplicated and sorted"
+        );
     }
 
     #[tokio::test]

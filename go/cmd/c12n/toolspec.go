@@ -117,7 +117,7 @@ func buildToolSpec() toolspec.ToolSpec {
 					{Name: "text", Short: "t", Type: "string", Description: "Text to classify"},
 					{Name: "input", Type: "string", Description: "JSONL file with ClassificationContext objects"},
 					{Name: "signal", Short: "s", Type: "string", Description: "Filter to a specific signal type"},
-					{Name: "concurrency", Short: "c", Type: "int", Description: "Number of concurrent workers"},
+					{Name: "concurrency", Type: "int", Description: "Number of concurrent workers"},
 					{Name: "output", Short: "o", Type: "string", Description: "Write ben-compatible JSONL to file"},
 				},
 				Safety:   &toolspec.Safety{Level: toolspec.SafetyLevelSafe},

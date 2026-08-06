@@ -77,21 +77,58 @@ final class Ffi
      *   2. `composer.json#extra.c12n-core.local-path` (project-local
      *      override; useful for development against a sibling cdylib).
      *   3. Default `runtime/lib/libc12n_core.<ext>` relative to package
-     *      root, populated by the post-install Installer (T-0143).
+     *      root, populated by the post-install Installer.
+     *
+     * Sources 1 and 2 accept EITHER a directory containing the cdylib
+     * (e.g. a cargo `target/release/` output dir) or a direct path to
+     * the shared-object file. Directories are resolved to the
+     * OS-specific filename via {@see Ffi::libFilename()}.
      */
     public static function libPath(): string
     {
         $envPath = getenv('C12N_CORE_LIB_PATH');
         if (is_string($envPath) && $envPath !== '') {
-            return $envPath;
+            return self::resolveDir($envPath);
         }
 
         $composerLocal = self::composerLocalPath();
         if ($composerLocal !== null) {
-            return $composerLocal;
+            return self::resolveDir($composerLocal);
         }
 
         return self::defaultLibPath();
+    }
+
+    /**
+     * OS-specific cdylib filename (`libc12n_core.{dylib,dll,so}`).
+     */
+    public static function libFilename(): string
+    {
+        $ext = match (PHP_OS_FAMILY) {
+            'Darwin' => 'dylib',
+            'Windows' => 'dll',
+            default => 'so',
+        };
+
+        return 'libc12n_core.' . $ext;
+    }
+
+    /**
+     * Append the OS-specific cdylib filename when $path names a
+     * directory; otherwise return $path untouched.
+     *
+     * The docblock on this class, the Installer's error message, and
+     * the README all tell users to point `C12N_CORE_LIB_PATH` at a
+     * directory (e.g. `target/release`). Honouring that here is what
+     * makes those instructions true.
+     */
+    private static function resolveDir(string $path): string
+    {
+        if (!is_dir($path)) {
+            return $path;
+        }
+
+        return rtrim($path, '/\\') . DIRECTORY_SEPARATOR . self::libFilename();
     }
 
     /**
@@ -124,13 +161,7 @@ final class Ffi
      */
     private static function defaultLibPath(): string
     {
-        $ext = match (PHP_OS_FAMILY) {
-            'Darwin' => 'dylib',
-            'Windows' => 'dll',
-            default => 'so',
-        };
-
-        return self::packageRoot() . '/runtime/lib/libc12n_core.' . $ext;
+        return self::packageRoot() . '/runtime/lib/' . self::libFilename();
     }
 
     private static function packageRoot(): string
