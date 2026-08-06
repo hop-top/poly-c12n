@@ -68,7 +68,7 @@ impl PreferenceSignal {
 impl Signal for PreferenceSignal {
     async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
         let response =
-            tokio::time::timeout(self.timeout, self.llm.query(&ctx.text, &self.system_prompt))
+            crate::rt::timeout(self.timeout, self.llm.query(&ctx.text, &self.system_prompt))
                 .await
                 .map_err(|_| SignalError::Timeout)??;
 

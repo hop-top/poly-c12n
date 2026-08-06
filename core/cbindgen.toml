@@ -7,6 +7,11 @@ namespace = ""
 
 [export]
 include = []
+# `rt.rs`'s `setTimeout`/`clearTimeout` imports are wasm-bindgen JS bindings
+# gated to `wasm32-unknown-unknown`. cbindgen does not evaluate `cfg`, so it
+# would otherwise emit them into the C header consumed by cgo/PHP FFI, where
+# no such symbols exist.
+exclude = ["set_timeout", "clear_timeout"]
 
 [parse]
 parse_deps = false

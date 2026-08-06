@@ -8,11 +8,12 @@ pub mod embedding;
 pub mod ffi;
 pub mod pipeline;
 pub mod prototype;
+pub mod rt;
 pub mod signal;
 pub mod signals;
 pub mod types;
 
-#[cfg(feature = "wasm")]
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 pub mod wasm;
 
 pub use pipeline::{Pipeline, PipelineError, PipelineResult};
