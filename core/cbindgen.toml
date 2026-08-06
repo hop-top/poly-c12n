@@ -7,6 +7,10 @@ namespace = ""
 
 [export]
 include = []
+# Rust-only tuning constants. cbindgen emits every `pub const` reachable from
+# the crate root, so anything re-exported in lib.rs lands in the C header
+# consumed by cgo/PHP FFI and becomes public ABI by accident.
+exclude = ["DEFAULT_ESCALATE_THRESHOLD"]
 
 [parse]
 parse_deps = false

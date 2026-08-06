@@ -13,11 +13,6 @@
 #include <stdlib.h>
 
 /**
- * Default confidence below which [`ChainStrategy::Escalate`] moves on.
- */
-#define DEFAULT_ESCALATE_THRESHOLD 0.5
-
-/**
  * Create a new pipeline. Returns opaque pointer.
  *
  * `config_json`: JSON string with `max_concurrency` and `timeout_ms`.
