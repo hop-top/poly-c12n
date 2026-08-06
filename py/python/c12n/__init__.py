@@ -9,7 +9,13 @@ try:
 except ImportError:
     pass
 
-from .config import Config, default_config, load_config
+from .config import (
+    Config,
+    ConfigError,
+    SignalType,
+    default_config,
+    load_config,
+)
 from .middleware import C12NMiddleware, get_signals, has_signal, signal_confidence
 from .router import SignalRouter, SignalRule
 
@@ -19,6 +25,8 @@ __all__ = [
     "has_signal",
     "signal_confidence",
     "Config",
+    "ConfigError",
+    "SignalType",
     "default_config",
     "load_config",
     "SignalRouter",
