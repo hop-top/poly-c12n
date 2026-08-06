@@ -189,44 +189,62 @@ func TestAllSignalTypes_MatchConsts(t *testing.T) {
 	}
 }
 
-func TestPipelineError_SignalFailed(t *testing.T) {
-	raw := `{"SignalFailed":{"name":"keyword","error":"model not found"}}`
-
-	var pe PipelineError
-	if err := json.Unmarshal([]byte(raw), &pe); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+// The core renders every PipelineError variant through its Display impl and
+// serializes the resulting string. These fixtures are the exact messages the
+// cdylib emits — see core's PipelineError thiserror attributes.
+func TestPipelineError_WireFormat(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want PipelineError
+	}{
+		{
+			name: "signal failed",
+			raw:  `"signal 'keyword' failed: model not found"`,
+			want: "signal 'keyword' failed: model not found",
+		},
+		{
+			name: "timeout",
+			raw:  `"signal 'embedding' timed out"`,
+			want: "signal 'embedding' timed out",
+		},
+		{
+			name: "no signals",
+			raw:  `"pipeline has no registered signals; results will be empty"`,
+			want: "pipeline has no registered signals; results will be empty",
+		},
 	}
 
-	if pe.SignalFailed == nil {
-		t.Fatal("SignalFailed is nil")
-	}
-	if pe.SignalFailed.Name != "keyword" {
-		t.Errorf("Name = %q, want %q", pe.SignalFailed.Name, "keyword")
-	}
-	if pe.SignalFailed.Error != "model not found" {
-		t.Errorf("Error = %q, want %q", pe.SignalFailed.Error, "model not found")
-	}
-	if pe.Timeout != nil {
-		t.Error("Timeout should be nil")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var pe PipelineError
+			if err := json.Unmarshal([]byte(tc.raw), &pe); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if pe != tc.want {
+				t.Errorf("got %q, want %q", pe, tc.want)
+			}
+			if pe.Error() != string(tc.want) {
+				t.Errorf("Error() = %q, want %q", pe.Error(), tc.want)
+			}
+		})
 	}
 }
 
-func TestPipelineError_Timeout(t *testing.T) {
-	raw := `{"Timeout":{"name":"embedding"}}`
+// A pipeline with no registered signals emits a non-empty errors array. This
+// is the envelope every unconfigured evaluation produces.
+func TestPipelineError_NoSignalsEnvelope(t *testing.T) {
+	raw := `{"results":[],"errors":["pipeline has no registered signals; results will be empty"],"duration_ms":0}`
 
-	var pe PipelineError
-	if err := json.Unmarshal([]byte(raw), &pe); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	r, err := ParseResult(raw)
+	if err != nil {
+		t.Fatalf("ParseResult: %v", err)
 	}
-
-	if pe.Timeout == nil {
-		t.Fatal("Timeout is nil")
+	if !r.HasErrors() {
+		t.Fatal("HasErrors() = false, want true")
 	}
-	if pe.Timeout.Name != "embedding" {
-		t.Errorf("Name = %q, want %q", pe.Timeout.Name, "embedding")
-	}
-	if pe.SignalFailed != nil {
-		t.Error("SignalFailed should be nil")
+	if len(r.Errors) != 1 {
+		t.Fatalf("len(Errors) = %d, want 1", len(r.Errors))
 	}
 }
 

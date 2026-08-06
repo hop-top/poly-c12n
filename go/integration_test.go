@@ -52,6 +52,20 @@ func TestIntegration_PipelineEmptyResult(t *testing.T) {
 	if result == nil {
 		t.Fatal("ParseResult returned nil")
 	}
+	if len(result.Results) != 0 {
+		t.Errorf("Results len = %d, want 0", len(result.Results))
+	}
+
+	// An unconfigured pipeline emits a no-signals diagnostic. Asserting on
+	// the decoded contents — not just on ParseResult succeeding — keeps the
+	// Go type pinned to the format the core actually emits.
+	if !result.HasErrors() {
+		t.Fatal("HasErrors() = false, want true for a pipeline with no signals")
+	}
+	const wantErr = "pipeline has no registered signals; results will be empty"
+	if got := result.Errors[0]; got != wantErr {
+		t.Errorf("Errors[0] = %q, want %q", got, wantErr)
+	}
 }
 
 func TestIntegration_PipelineCloseIdempotent(t *testing.T) {
