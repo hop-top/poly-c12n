@@ -30,7 +30,7 @@ const testJSON = `{
 		}
 	],
 	"errors": [
-		{"SignalFailed": {"name": "domain", "error": "model not loaded"}}
+		"signal 'domain' failed: model not loaded"
 	],
 	"duration_ms": 1234
 }`
@@ -145,16 +145,11 @@ func TestPipelineErrorFields(t *testing.T) {
 	r, _ := ParseResult(testJSON)
 
 	e := r.Errors[0]
-	if e.SignalFailed == nil {
-		t.Fatal("expected SignalFailed != nil")
+	const want = "signal 'domain' failed: model not loaded"
+	if string(e) != want {
+		t.Fatalf("expected error %q, got %q", want, string(e))
 	}
-	if e.SignalFailed.Name != "domain" {
-		t.Fatalf("expected error name 'domain', got %q", e.SignalFailed.Name)
-	}
-	if e.SignalFailed.Error != "model not loaded" {
-		t.Fatalf("expected error 'model not loaded', got %q", e.SignalFailed.Error)
-	}
-	if e.Timeout != nil {
-		t.Fatal("expected Timeout = nil")
+	if e.Error() != want {
+		t.Fatalf("Error() = %q, want %q", e.Error(), want)
 	}
 }
