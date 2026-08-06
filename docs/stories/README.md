@@ -13,9 +13,30 @@ Tool-author user stories. Each story is one page, intent-driven shape:
 | [US-0006](US-0006-toolspec-discovery.md) | Emit toolspec JSON for AI-agent discovery | `cmd/c12n/e2e_test.go:TestE2EToolspecValidJSON`, `TestE2EToolspecContainsAllCommands`, `TestE2EToolspecHasErrorPatterns` |
 | [US-0007](US-0007-json-ffi-roundtrip.md) | Parse JSON from FFI without panic | `integration_test.go:TestIntegration_JSONRoundTripThroughFFI`, `e2e_test.go:TestE2E_ClassificationContext_FullRoundTrip` |
 | [US-0008](US-0008-config-scope.md) | Configure pipeline scope (system/user/project) | `cmd/c12n/e2e_test.go:TestE2EConfigSetScopeFlag`, `cmd/c12n/doctor_regressions_test.go:TestDoctorConfigCheck_*` |
+| [US-0020](US-0020-php-install-load.md) | Install and load the PHP binding | `php/tests/FfiTest.php`, `php/tests/InstallerTest.php`, `php/tests/PipelineFfiIntegrationTest.php` |
+| [US-0021](US-0021-php-evaluate-parse.md) | Evaluate a context and parse the result in PHP | `php/tests/PipelineFfiIntegrationTest.php:testEvaluateReturnsValidEnvelopeForDefaultConfig`, `testPipelineResultParsesRoundtripJson`, `php/tests/PipelineTest.php` |
+| [US-0022](US-0022-php-no-signals.md) | Handle errors and the NoSignals diagnostic in PHP | `php/tests/PipelineFfiIntegrationTest.php:testEmptyPipelineJsonShapeMatchesCanonicalParity`, `testEvaluateReturnsErrorEnvelopeForMalformedContext` |
+| [US-0023](US-0023-ts-install-entrypoint.md) | Install `@hop-top/c12n` and pick the right entrypoint | `ts/test/pipeline.integration.test.ts`, `ts/test/setup.ts`, `ts/test/bundler-smoke.test.ts` |
+| [US-0024](US-0024-ts-evaluate-parse.md) | Evaluate a context and parse the result in TypeScript | `ts/test/pipeline.integration.test.ts`, `ts/test/pipeline.test.ts` |
+| [US-0025](US-0025-ts-no-signals.md) | Handle errors and the NoSignals diagnostic in TypeScript | `ts/test/pipeline.integration.test.ts`, `ts/test/pipeline.test.ts`, `ts/test/bundler-smoke.test.ts` |
 
 UCP: tool authors. See [personas/](../personas/README.md) for the five
 roles these stories serve.
+
+## Binding coverage
+
+US-0001..US-0008 were written Go-first and cite Go test paths
+throughout; several describe surfaces (CLI, build tags) that exist
+only on Go. US-0020..US-0025 cover PHP and TypeScript.
+
+**Detector configuration is Rust-only today.** Detectors and tiered
+chains (`core/src/registry.rs`, `core/src/chain.rs`, ADR-0003) are
+not plumbed through `c12n_pipeline_new` (`core/src/ffi.rs`) or the
+wasm constructor (`core/src/wasm.rs`), both of which build the
+pipeline with a hardcoded empty signal vector. PHP and TS callers
+therefore get a working pipeline that returns zero results plus a
+`NoSignals` diagnostic. US-0022 and US-0025 document this; they are
+marked `status: partial` for that reason.
 
 ## Build-mode note
 
