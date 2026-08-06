@@ -129,19 +129,38 @@ double-reported and an SSN shape wins over a phone shape. Results are
 sorted by `start`.
 
 `PiiSignal` wraps the detector and filters to a **deny list** of
-entity types. With an empty deny list the signal reports
-`confidence: 0.0` and no labels even when entities were found — the
-entities still appear in `metadata["entities"]`. Pass the types you
-care about:
+entity types — the types you want reported. An **empty** deny list
+means "nothing configured yet", so every detected type is reported;
+it never means "detect nothing":
+
+```rust
+let signal = PiiSignal::with_chain(chain, HashSet::new(), 4096);
+// → confidence=0.95 labels=["EMAIL", "CREDIT_CARD"]
+```
+
+### A partial deny list still hides findings — check the metadata
+
+Naming *some* types suppresses the rest. That is the intended filter,
+but it means a clean-looking verdict can coexist with real PII the
+detector found and the signal dropped. Every evaluation therefore
+reports what was suppressed, so the two cases are always
+distinguishable:
 
 ```rust
 let signal = PiiSignal::with_chain(
     chain,
-    HashSet::from(["EMAIL".to_string(), "CREDIT_CARD".to_string()]),
+    HashSet::from(["EMAIL".to_string()]),
     4096,
 );
-// → confidence=0.95 labels=["EMAIL", "CREDIT_CARD"]
+// → confidence=0.95 labels=["EMAIL"]
+//   metadata["entities_suppressed"]      = 1
+//   metadata["entity_types_suppressed"]  = ["CREDIT_CARD"]
 ```
+
+`entities_suppressed` is `0` on a genuinely clean scan, so a caller
+can always tell "the detector found nothing" from "my deny list
+dropped it". If you are using this signal as a safety gate, read that
+key — a `confidence` of `0.0` alone does not mean the text is clean.
 
 ## Tests
 
