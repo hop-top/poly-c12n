@@ -67,12 +67,10 @@ impl PreferenceSignal {
 #[async_trait]
 impl Signal for PreferenceSignal {
     async fn evaluate(&self, ctx: &ClassificationContext) -> Result<SignalResult, SignalError> {
-        let response = crate::rt::timeout(
-            self.timeout,
-            self.llm.query(&ctx.text, &self.system_prompt),
-        )
-        .await
-        .map_err(|_| SignalError::Timeout)??;
+        let response =
+            crate::rt::timeout(self.timeout, self.llm.query(&ctx.text, &self.system_prompt))
+                .await
+                .map_err(|_| SignalError::Timeout)??;
 
         let (label, confidence) = self.find_label(&response);
 

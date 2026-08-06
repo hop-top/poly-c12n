@@ -26,10 +26,10 @@
 use std::future::Future;
 use std::time::Duration;
 
-#[cfg(not(target_arch = "wasm32"))]
-pub use std::time::Instant;
 #[cfg(target_arch = "wasm32")]
 pub use instant::Instant;
+#[cfg(not(target_arch = "wasm32"))]
+pub use std::time::Instant;
 
 /// Error returned by [`timeout`] when the inner future did not complete in
 /// time. Mirrors `tokio::time::error::Elapsed`.
