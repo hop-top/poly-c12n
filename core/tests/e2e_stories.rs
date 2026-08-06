@@ -39,12 +39,18 @@ async fn lifecycle_default_pipeline_evaluates_without_panic() {
 }
 
 #[tokio::test]
-async fn lifecycle_empty_pipeline_returns_valid_result() {
+async fn lifecycle_empty_pipeline_reports_no_signals() {
     let pipeline = Pipeline::new(vec![], 4, Duration::from_secs(1));
     let result = pipeline.evaluate(&make_ctx("anything")).await;
 
+    // An unconfigured pipeline is a caller wiring bug, not a legitimate
+    // "nothing matched". The envelope stays well-formed but carries a loud
+    // diagnostic that every binding surfaces via its `errors` array.
     assert!(result.results.is_empty());
-    assert!(result.errors.is_empty());
+    assert_eq!(result.errors.len(), 1);
+    assert!(result.errors[0]
+        .to_string()
+        .contains("no registered signals"));
     assert!(result.duration >= Duration::ZERO);
 }
 
