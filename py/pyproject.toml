@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "hop-top-c12n"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 description = "c12n classification engine — Python bindings"
 requires-python = ">=3.9"
 
