@@ -181,43 +181,57 @@ This blocked `Pipeline::new` + `Pipeline::evaluate` from running under
 `wasm-bindgen`'s nodejs target — T9's wasm-pack build succeeds but every
 classification call panics.
 
-**Workaround (v0.1.0-alpha.0, option A in T-0186):** depend on the
-[`instant`](https://docs.rs/instant) crate behind the `wasm` Cargo feature
-(`instant = { version = "0.1", features = ["wasm-bindgen"], optional = true }`)
-and `cfg`-alias the `Instant` import in `pipeline.rs`:
+**Superseded first attempt (option A).** The initial fix aliased `Instant` to
+the [`instant`](https://docs.rs/instant) crate behind the `wasm` Cargo feature
+and left tokio's `time` feature enabled on all targets. That analysis was
+wrong about *where* the panic originated. The explicit `Instant::now()` in
+`evaluate` was never reached: `Pipeline::new` already panicked, because
+`Builder::new_current_thread().enable_all()` constructs tokio's **timer
+driver**, and that driver calls `std::time::Instant::now()` at construction
+time. So the wasm surface trapped with `unreachable` on the very first
+`new Pipeline({})` — before any classification ran. The claim that the
+current_thread runtime "does not exercise those tokio code paths" did not
+hold: enabling the `time` feature is itself sufficient to trap.
 
-```rust
-#[cfg(not(feature = "wasm"))]
-use std::time::Instant;
-#[cfg(feature = "wasm")]
-use instant::Instant;
-```
+**Current fix (option B).** Tokio's `time` feature is no longer enabled on
+`wasm32`. `core/Cargo.toml` moves it into the
+`cfg(not(target_arch = "wasm32"))` dependency table alongside
+`rt-multi-thread`, so the wasm runtime is built from `sync` + `rt` + `macros`
+only and `enable_all()` no longer instantiates a timer driver.
 
-On native targets `instant::Instant` is a zero-cost re-export of
-`std::time::Instant`; on wasm32 it is backed by `performance.now()` via
-wasm-bindgen. The explicit `Instant::now()` + `start.elapsed()` call in
-`evaluate` now runs on both surfaces without touching `unreachable!()`.
+The two capabilities `pipeline.rs` actually needs — a monotonic clock and an
+async timeout — move behind `core/src/rt.rs`, which selects an implementation
+by **target arch** (not by Cargo feature, so `cargo check --target wasm32-*`
+behaves the same with or without `wasm`):
 
-**Scope of the fix.** This only addresses the explicit `Instant::now()` call
-in `pipeline.rs`. Tokio's own time driver (`tokio::time::timeout`,
-`tokio::time::sleep`, `tokio::time::interval`) still imports
-`std::time::Instant` internally; the polyfill does not reach those paths.
-For the v0 scheduler this is acceptable because the `current_thread`
-runtime built in `wasm.rs` schedules our short-lived classification signals
-without exercising those tokio code paths under typical inputs. If a future
-adopter hits a tokio-driver panic on wasm — most likely from a signal whose
-own implementation calls `tokio::time::sleep` or `timeout` — escalate to
-option B below.
+| | native | `wasm32-unknown-unknown` |
+|---|---|---|
+| `rt::Instant` | `std::time::Instant` | `instant::Instant` (`performance.now()`) |
+| `rt::timeout` | `tokio::time::timeout` | inner future raced against a `setTimeout` sleep |
 
-**Follow-up (option B, future track).** The idiomatic long-term fix is to
-drop the tokio `time` feature on `cfg(target_arch = "wasm32")` and refactor
-the signal scheduler to drive timeouts via `wasm-bindgen-futures::JsFuture`
-(`setTimeout` + a Rust `oneshot` channel) rather than `tokio::time::timeout`.
-That removes the entire `std::time::Instant` dependency from the wasm
-build and aligns c12n-core with the wasm community pattern (see e.g. how
-`tokio-util`/`futures-timer` handle this). The refactor is more invasive
-(touches every signal that races on a timeout, plus the `Pipeline::evaluate`
-fan-out) and is deliberately out of scope for v0.1.0-alpha.0.
+Native semantics are unchanged — `rt::timeout` delegates straight to
+`tokio::time::timeout`. Both call sites (`Pipeline::evaluate`'s fan-out and
+`PreferenceSignal::evaluate`) go through `rt::timeout`, so signal timeouts
+stay enforced on every target.
+
+The wasm sleep is hand-rolled against the host's `setTimeout` via a
+`wasm_bindgen` `extern` block rather than pulling in `wasm-bindgen-futures` /
+`js-sys`: all that is needed is a one-shot timer that wakes the
+current-thread runtime, and routing through a JS `Promise` would additionally
+require a microtask executor. The future cancels its pending timer on drop so
+a won race cannot fire into a freed closure.
+
+`Sleep` carries an `unsafe impl Send`. This is sound because
+`wasm32-unknown-unknown` is single-threaded, and it is *necessary* because
+`Signal` is `Send + Sync` on every target while `Pipeline::evaluate` fans
+signals out through `JoinSet::spawn`, which demands `Send` futures. Asserting
+`Send` on one small leaf type keeps the `Signal` trait shape uniform across
+targets; the alternative (`#[async_trait(?Send)]` + `spawn_local` + a
+`LocalSet` on wasm32) would fork the scheduler and every signal impl.
+
+One cbindgen wrinkle: cbindgen does not evaluate `cfg`, so it emitted the
+wasm-only `setTimeout`/`clearTimeout` imports into the C header consumed by
+cgo/PHP FFI. `core/cbindgen.toml` excludes them explicitly.
 
 ## References
 

@@ -5,24 +5,12 @@ use thiserror::Error;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
-// `Instant` source — see ADR-0001 (Implementation Notes: time-on-wasm).
-// Native targets keep `std::time::Instant` (zero-cost, same as before).
-// On `wasm32-unknown-unknown`, `std::time::Instant::now()` is stubbed to
-// `unreachable!()`, so the `wasm` feature substitutes `instant::Instant`,
-// which is backed by `performance.now()` via wasm-bindgen.
-//
-// NOTE: This fix only addresses the explicit `Instant::now()` call below.
-// Tokio's `time::timeout` / `time::sleep` machinery still relies on
-// `std::time::Instant` in its driver; the single-threaded `current_thread`
-// runtime built in `wasm.rs` happens to schedule signals without invoking
-// that path for our short-lived classification workload. The option-B
-// follow-up (refactor signal scheduler around `wasm-bindgen-futures`
-// timeouts and drop tokio's `time` feature on wasm32) tracks the
-// idiomatic fix; see ADR-0001.
-#[cfg(feature = "wasm")]
-use instant::Instant;
-#[cfg(not(feature = "wasm"))]
-use std::time::Instant;
+// Clock + timeout come from `crate::rt`, which picks a per-target
+// implementation: tokio's timer on native, `performance.now()` +
+// `setTimeout` on `wasm32-unknown-unknown` (whose libstd stubs
+// `Instant::now()` to `unreachable!()` and therefore cannot back tokio's
+// time driver). Semantics are identical on both. See ADR-0001.
+use crate::rt::{timeout, Instant};
 
 use crate::signal::Signal;
 use crate::types::{ClassificationContext, SignalError, SignalResult};
@@ -82,7 +70,7 @@ impl Pipeline {
             join_set.spawn(async move {
                 let _permit = sem.acquire().await.expect("semaphore closed");
 
-                match tokio::time::timeout(timeout_dur, signal.evaluate(&ctx)).await {
+                match timeout(timeout_dur, signal.evaluate(&ctx)).await {
                     Ok(Ok(result)) => Ok(result),
                     Ok(Err(err)) => Err(PipelineError::SignalFailed { name, error: err }),
                     Err(_elapsed) => Err(PipelineError::Timeout { name }),
