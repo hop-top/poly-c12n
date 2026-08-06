@@ -113,9 +113,9 @@ func TestIntegration_JSONRoundTripThroughFFI(t *testing.T) {
 		t.Fatalf("re-marshal result: %v", err)
 	}
 
-	// DurationNs should be non-negative.
-	if result.DurationNs < 0 {
-		t.Errorf("DurationNs = %d, want >= 0", result.DurationNs)
+	// DurationMs should be non-negative.
+	if result.DurationMs < 0 {
+		t.Errorf("DurationMs = %d, want >= 0", result.DurationMs)
 	}
 }
 

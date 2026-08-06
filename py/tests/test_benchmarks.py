@@ -97,7 +97,7 @@ SAMPLE_RESULT = {
         },
     ],
     "errors": [],
-    "duration_ns": 1500000,
+    "duration_ms": 15,
 }
 
 SAMPLE_JSON = json.dumps(SAMPLE_RESULT)

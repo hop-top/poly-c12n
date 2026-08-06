@@ -55,7 +55,7 @@ def sample_result_dict():
             },
         ],
         "errors": [],
-        "duration_ns": 1500000,
+        "duration_ms": 15,
     }
 
 

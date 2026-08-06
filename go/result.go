@@ -9,7 +9,7 @@ import (
 type PipelineResult struct {
 	Results    []SignalResult  `json:"results"`
 	Errors     []PipelineError `json:"errors"`
-	DurationNs int64           `json:"duration_ns"`
+	DurationMs int64           `json:"duration_ms"`
 }
 
 // ParseResult deserializes a JSON result string.
@@ -23,7 +23,7 @@ func ParseResult(raw string) (*PipelineResult, error) {
 
 // Duration returns the pipeline execution duration.
 func (r *PipelineResult) Duration() time.Duration {
-	return time.Duration(r.DurationNs) * time.Nanosecond
+	return time.Duration(r.DurationMs) * time.Millisecond
 }
 
 // Signal returns the first result matching the given type.

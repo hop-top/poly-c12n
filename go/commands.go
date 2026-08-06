@@ -177,7 +177,7 @@ func resolveText(args []string, stdin io.Reader) (string, error) {
 // filterSignal returns a copy of the result containing only matching signals.
 func filterSignal(r *PipelineResult, t SignalType) *PipelineResult {
 	out := &PipelineResult{
-		DurationNs: r.DurationNs,
+		DurationMs: r.DurationMs,
 		Errors:     r.Errors,
 	}
 	for _, s := range r.Results {

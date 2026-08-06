@@ -32,7 +32,7 @@ const testJSON = `{
 	"errors": [
 		{"SignalFailed": {"name": "domain", "error": "model not loaded"}}
 	],
-	"duration_ns": 1234567
+	"duration_ms": 1234
 }`
 
 func TestParseResult(t *testing.T) {
@@ -46,8 +46,8 @@ func TestParseResult(t *testing.T) {
 	if len(r.Errors) != 1 {
 		t.Fatalf("expected 1 error, got %d", len(r.Errors))
 	}
-	if r.DurationNs != 1234567 {
-		t.Fatalf("expected duration_ns 1234567, got %d", r.DurationNs)
+	if r.DurationMs != 1234 {
+		t.Fatalf("expected duration_ms 1234, got %d", r.DurationMs)
 	}
 }
 
@@ -123,7 +123,7 @@ func TestDuration(t *testing.T) {
 	r, _ := ParseResult(testJSON)
 
 	d := r.Duration()
-	expected := time.Duration(1234567) * time.Nanosecond
+	expected := time.Duration(1234) * time.Millisecond
 	if d != expected {
 		t.Fatalf("expected duration %v, got %v", expected, d)
 	}
@@ -135,7 +135,7 @@ func TestHasErrors(t *testing.T) {
 		t.Fatal("expected HasErrors() = true")
 	}
 
-	noErr, _ := ParseResult(`{"results":[],"errors":[],"duration_ns":0}`)
+	noErr, _ := ParseResult(`{"results":[],"errors":[],"duration_ms":0}`)
 	if noErr.HasErrors() {
 		t.Fatal("expected HasErrors() = false for empty errors")
 	}

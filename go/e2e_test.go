@@ -76,7 +76,7 @@ const validResultJSON = `{
 		}
 	],
 	"errors": [],
-	"duration_ns": 5000000
+	"duration_ms": 5
 }`
 
 func TestE2E_ParseResult_Accessors(t *testing.T) {
@@ -106,7 +106,7 @@ func TestE2E_ParseResult_HasErrors(t *testing.T) {
 	withErr := `{
 		"results": [],
 		"errors": [{"SignalFailed":{"name":"broken","error":"boom"}}],
-		"duration_ns": 100
+		"duration_ms": 100
 	}`
 	r, err := ParseResult(withErr)
 	if err != nil {
