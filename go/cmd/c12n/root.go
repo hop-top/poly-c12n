@@ -43,7 +43,31 @@ func ConfigOptsFromContext(cmd *cobra.Command) config.Options {
 	return v
 }
 
-func run(ctx context.Context) error {
+// rootConfigOptions returns the layered config slots c12n loads from:
+// system (/etc/c12n/config.yaml), user ($XDG_CONFIG_HOME/c12n/config.yaml),
+// and project (./.c12n.yaml), plus the C12N_<KEY> env layer. Extracted from
+// newRoot so tests can assert the layering without executing a command.
+//
+// A failure to resolve the XDG directory leaves UserConfigPath empty rather
+// than aborting: the system and project layers still load, and kit's config
+// loader silently skips empty conventional slots.
+func rootConfigOptions() config.Options {
+	opts := config.Options{
+		SystemConfigPath:  filepath.Join("/etc", "c12n", "config.yaml"),
+		ProjectConfigPath: ".c12n.yaml",
+		EnvPrefix:         "C12N",
+	}
+	if cfgDir, err := xdg.ConfigDir("c12n"); err == nil {
+		opts.UserConfigPath = filepath.Join(cfgDir, "config.yaml")
+	}
+	return opts
+}
+
+// newRoot builds the fully wired root command exactly as the binary does.
+// Tests MUST use this constructor (not a hand-rolled cobra.Command) so the
+// kit contract — global flag registration, PersistentPreRunE, hints — is
+// exercised the same way it is at runtime.
+func newRoot() (*cli.Root, error) {
 	root := cli.New(cli.Config{
 		Name:    "c12n",
 		Version: version,
@@ -52,21 +76,8 @@ func run(ctx context.Context) error {
 
 	log := kitlog.New(root.Viper)
 
-	// Resolve XDG config directory for layered config loading.
-	cfgDir, err := xdg.ConfigDir("c12n")
-	if err != nil {
-		return fmt.Errorf("resolve config dir: %w", err)
-	}
-
-	opts := config.Options{
-		UserConfigPath:    filepath.Join(cfgDir, "config.yaml"),
-		ProjectConfigPath: ".c12n.yaml",
-	}
-
-	// Allow explicit --config flag to override all file paths.
-	var cfgFlag string
-	root.Cmd.PersistentFlags().StringVar(&cfgFlag, "config", "",
-		"Path to config file (overrides default locations)")
+	opts := rootConfigOptions()
+	opts.Viper = root.Viper
 
 	// Hint registrations.
 	var upgraded, updateAvail bool
@@ -74,10 +85,16 @@ func run(ctx context.Context) error {
 	output.RegisterVersionHints(root.Hints, "c12n", &updateAvail)
 
 	root.Cmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
-		// Override config paths when --config is provided.
-		if cfgFlag != "" {
-			opts = config.Options{ProjectConfigPath: cfgFlag}
+		// Layer kit's -c/--config tokens on top of the discovered
+		// files: bare paths append to ExtraConfigPaths, key=value
+		// tokens become Overrides that win over every file layer.
+		extraPaths, overrides, err := root.ConfigArgs()
+		if err != nil {
+			return err
 		}
+		opts := opts
+		opts.ExtraConfigPaths = extraPaths
+		opts.Overrides = overrides
 
 		cfg, err := c12n.LoadConfig(opts)
 		if err != nil {
@@ -113,5 +130,13 @@ func run(ctx context.Context) error {
 
 	registerCompletions(root.Cmd)
 
+	return root, nil
+}
+
+func run(ctx context.Context) error {
+	root, err := newRoot()
+	if err != nil {
+		return err
+	}
 	return root.Execute(ctx)
 }

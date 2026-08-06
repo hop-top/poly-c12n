@@ -154,7 +154,9 @@ func TestE2EBenchAllFlags(t *testing.T) {
 		{"text", "t"},
 		{"input", ""},
 		{"signal", "s"},
-		{"concurrency", "c"},
+		// --concurrency has no shorthand: -c is reserved by kit for
+		// the global --config flag.
+		{"concurrency", ""},
 		{"output", "o"},
 	}
 
@@ -164,8 +166,8 @@ func TestE2EBenchAllFlags(t *testing.T) {
 			if f == nil {
 				t.Fatalf("missing flag --%s", tc.name)
 			}
-			if tc.shorthand != "" && f.Shorthand != tc.shorthand {
-				t.Errorf("expected shorthand -%s, got %q",
+			if f.Shorthand != tc.shorthand {
+				t.Errorf("expected shorthand %q, got %q",
 					tc.shorthand, f.Shorthand)
 			}
 		})
