@@ -13,12 +13,36 @@ Tool-author user stories. Each story is one page, intent-driven shape:
 | [US-0006](US-0006-toolspec-discovery.md) | Emit toolspec JSON for AI-agent discovery | `cmd/c12n/e2e_test.go:TestE2EToolspecValidJSON`, `TestE2EToolspecContainsAllCommands`, `TestE2EToolspecHasErrorPatterns` |
 | [US-0007](US-0007-json-ffi-roundtrip.md) | Parse JSON from FFI without panic | `integration_test.go:TestIntegration_JSONRoundTripThroughFFI`, `e2e_test.go:TestE2E_ClassificationContext_FullRoundTrip` |
 | [US-0008](US-0008-config-scope.md) | Configure pipeline scope (system/user/project) | `cmd/c12n/e2e_test.go:TestE2EConfigSetScopeFlag`, `cmd/c12n/doctor_regressions_test.go:TestDoctorConfigCheck_*` |
+| [US-0009](US-0009-regex-pii-baseline.md) | Catch structured PII with the regex baseline | `core/src/signals/detectors/pii_regex.rs:email_true_positives`, `luhn_accepts_known_test_cards`, `wired_into_pii_signal` |
+| [US-0010](US-0010-heuristic-jailbreak-baseline.md) | Flag obvious jailbreak attempts with the heuristic baseline | `core/src/signals/detectors/jailbreak_heuristic.rs:injection_true_positives`, `confidence_saturates_and_never_reaches_one` |
+| [US-0011](US-0011-stopword-language-baseline.md) | Identify Western European languages by stopword frequency | `core/src/signals/detectors/language_stopword.rs:detects_each_supported_language`, `unsupported_scripts_yield_none_not_a_wrong_guess` |
+| [US-0012](US-0012-approx-tokenizer-estimate.md) | Estimate token counts without a vocabulary | `core/src/signals/detectors/tokenizer_approx.rs:model_name_advertises_approximation`, `english_prose_lands_near_four_chars_per_token` |
+| [US-0013](US-0013-tiered-detector-chains.md) | Trade cost against accuracy with tiered detector chains | `core/src/chain.rs:parses_strategy_specs`, `scalar_trait_rejects_confidence_strategies`, `provenance_lands_in_metadata` |
+| [US-0014](US-0014-detector-registry-by-name.md) | Build detector chains from configuration names | `core/src/registry.rs:builds_registered_pii_detector`, `unknown_name_fails_loudly_and_names_alternatives` |
+| [US-0015](US-0015-no-signals-diagnostic.md) | Learn that a pipeline has no signals registered | `core/src/pipeline.rs` (NoSignals), `ts/test/pipeline.integration.test.ts`, `php/tests/PipelineFfiIntegrationTest.php` |
 | [US-0020](US-0020-php-install-load.md) | Install and load the PHP binding | `php/tests/FfiTest.php`, `php/tests/InstallerTest.php`, `php/tests/PipelineFfiIntegrationTest.php` |
-| [US-0021](US-0021-php-evaluate-parse.md) | Evaluate a context and parse the result in PHP | `php/tests/PipelineFfiIntegrationTest.php:testEvaluateReturnsValidEnvelopeForDefaultConfig`, `testPipelineResultParsesRoundtripJson`, `php/tests/PipelineTest.php` |
-| [US-0022](US-0022-php-no-signals.md) | Handle errors and the NoSignals diagnostic in PHP | `php/tests/PipelineFfiIntegrationTest.php:testEmptyPipelineJsonShapeMatchesCanonicalParity`, `testEvaluateReturnsErrorEnvelopeForMalformedContext` |
-| [US-0023](US-0023-ts-install-entrypoint.md) | Install `@hop-top/c12n` and pick the right entrypoint | `ts/test/pipeline.integration.test.ts`, `ts/test/setup.ts`, `ts/test/bundler-smoke.test.ts` |
+| [US-0021](US-0021-php-evaluate-parse.md) | Evaluate a context and parse the result in PHP | `php/tests/PipelineFfiIntegrationTest.php:testEvaluateReturnsValidEnvelopeForDefaultConfig`, `php/tests/PipelineTest.php` |
+| [US-0022](US-0022-php-no-signals.md) | Handle errors and the NoSignals diagnostic in PHP | `php/tests/PipelineFfiIntegrationTest.php:testEmptyPipelineJsonShapeMatchesCanonicalParity` |
+| [US-0023](US-0023-ts-install-entrypoint.md) | Install `@hop-top/c12n` and pick the right entrypoint | `ts/test/nodejs-subpath.test.ts`, `ts/test/bundler-smoke.test.ts` |
 | [US-0024](US-0024-ts-evaluate-parse.md) | Evaluate a context and parse the result in TypeScript | `ts/test/pipeline.integration.test.ts`, `ts/test/pipeline.test.ts` |
-| [US-0025](US-0025-ts-no-signals.md) | Handle errors and the NoSignals diagnostic in TypeScript | `ts/test/pipeline.integration.test.ts`, `ts/test/pipeline.test.ts`, `ts/test/bundler-smoke.test.ts` |
+| [US-0025](US-0025-ts-no-signals.md) | Handle errors and the NoSignals diagnostic in TypeScript | `ts/test/pipeline.integration.test.ts`, `ts/test/bundler-smoke.test.ts` |
+
+## Status values
+
+`shipped` — usable today from every binding the story names.
+`partial` — implemented in the Rust core, but **not yet selectable
+from Go / Python / PHP / TypeScript**, because the config-schema
+plumbing has not landed. US-0009..US-0014 are `partial` for exactly
+this reason; each states its boundary inline.
+
+## Quality limits are documented, not implied
+
+The tier-1 detectors (US-0009..US-0012) are deliberately simple
+baselines. Each story carries the detector's real limitations in
+prose — what it misses, where it is bypassed, how wrong the number
+can be — because a caller who never reads Rust doc comments would
+otherwise assume coverage that does not exist. Believing PII is being
+caught when it is not is worse than shipping nothing.
 
 UCP: tool authors. See [personas/](../personas/README.md) for the five
 roles these stories serve.

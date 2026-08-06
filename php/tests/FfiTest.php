@@ -73,4 +73,41 @@ final class FfiTest extends TestCase
 
         self::assertStringContainsString('runtime/lib/libc12n_core.', $path);
     }
+
+    public function testLibPathAppendsFilenameWhenEnvVarIsADirectory(): void
+    {
+        // The README and the Installer's error message both instruct
+        // users to point C12N_CORE_LIB_PATH at a DIRECTORY (e.g. a
+        // cargo `target/release/` output dir). The resolver must honour
+        // that, not just the direct-file form.
+        $dir = sys_get_temp_dir();
+        putenv('C12N_CORE_LIB_PATH=' . $dir);
+
+        self::assertSame(
+            rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . Ffi::libFilename(),
+            Ffi::libPath(),
+        );
+    }
+
+    public function testLibPathTrimsTrailingSlashOnDirectoryEnvVar(): void
+    {
+        $dir = rtrim(sys_get_temp_dir(), '/\\');
+        putenv('C12N_CORE_LIB_PATH=' . $dir . '/');
+
+        self::assertSame(
+            $dir . DIRECTORY_SEPARATOR . Ffi::libFilename(),
+            Ffi::libPath(),
+        );
+    }
+
+    public function testLibFilenameIsOsSpecific(): void
+    {
+        $expectedExt = match (PHP_OS_FAMILY) {
+            'Darwin' => 'dylib',
+            'Windows' => 'dll',
+            default => 'so',
+        };
+
+        self::assertSame('libc12n_core.' . $expectedExt, Ffi::libFilename());
+    }
 }
