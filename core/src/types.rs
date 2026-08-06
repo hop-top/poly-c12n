@@ -36,7 +36,7 @@ pub struct SignalResult {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ClassificationContext {
     pub text: String,
     #[serde(default, deserialize_with = "deserialize_null_default")]
