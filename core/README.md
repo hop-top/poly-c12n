@@ -3,14 +3,12 @@
 The c12n classification **engine** — low-level Rust core with a C ABI for
 cross-language FFI consumers (Go cgo, Python PyO3, PHP FFI, TS WASM).
 
+> **Status:** Active development. Usable today, with some rough edges as features evolve.
+
 > [!NOTE]
 > **Read-only mirror.** This repo is subtree-pushed from
 > [`hop-top/poly-c12n`](https://github.com/hop-top/poly-c12n). Open issues and
 > PRs there, not here.
-
-> [!WARNING]
-> **Alpha — API, ABI, and tag history may break.** Pin to exact tags, not
-> ranges.
 
 ## Engine, not SDK
 

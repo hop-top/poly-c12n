@@ -2,10 +2,7 @@
 
 LLM request classification engine for intelligent model routing.
 
-> [!WARNING]
-> **Alpha — API and tag history may break.** Each component ships on its
-> own `<component>/v*` alpha line. Pin to exact tags, not ranges. Breaking
-> changes may land between alpha tags; see each component's `CHANGELOG.md`.
+> **Status:** Active development. Usable today, with some rough edges as features evolve.
 
 ## What
 

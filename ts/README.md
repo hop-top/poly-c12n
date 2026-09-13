@@ -4,6 +4,8 @@ TypeScript bindings for [`c12n-core`][core] — a classification pipeline
 runtime — shipped as a single WebAssembly artifact that runs across
 Node.js, browsers, Cloudflare Workers, and Deno.
 
+> **Status:** Active development. Usable today, with some rough edges as features evolve.
+
 See [ADR-0001][adr] for the locked binding decisions.
 
 ## Install

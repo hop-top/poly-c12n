@@ -3,9 +3,7 @@
 Idiomatic Rust SDK over the c12n classification engine
 ([`c12n-core`](https://github.com/hop-top/poly-c12n/tree/main/core)).
 
-> [!WARNING]
-> **Alpha — API and tag history may break.** Ships on the
-> `c12n-rs/v*` alpha line. Pin to exact tags, not ranges.
+> **Status:** Active development. Usable today, with some rough edges as features evolve.
 
 ## What this crate adds over `c12n-core`
 
