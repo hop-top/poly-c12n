@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import textwrap
 from pathlib import Path
 
@@ -9,10 +10,13 @@ import pytest
 
 from c12n.config import (
     Config,
+    ConfigError,
     KeywordConfig,
     KeywordRuleConfig,
     SignalsConfig,
+    SignalType,
     _dict_to_config,
+    _FLAT_KEYS,
     default_config,
     load_config,
 )
@@ -306,3 +310,247 @@ class TestLoadConfigYAML:
 
         with pytest.raises(ImportError, match="pkl-python"):
             load_config(str(config_file))
+
+
+# ---------------------------------------------------------------------------
+# Regression: Go-shaped (flat) config must not be silently discarded.
+#
+# The flat schema is the cross-language contract in go/config.pkl. It was
+# parsed as "no recognised keys", so every flat setting fell back to the
+# Python default -- a config disabling PII detection produced a pipeline
+# with PII detection ON, with no error and no warning.
+# ---------------------------------------------------------------------------
+
+
+# Every flat key in go/config.pkl paired with a non-default value and the
+# nested attribute path it must reach.
+FLAT_SCHEMA_CASES = [
+    ("max_concurrency", 4, ("max_concurrency",)),
+    ("timeout_ms", 1234, ("timeout_ms",)),
+    ("keyword_enabled", False, ("signals", "keyword", "enabled")),
+    ("keyword_strategy", "bm25", ("signals", "keyword", "strategy")),
+    ("keyword_threshold", 0.11, ("signals", "keyword", "threshold")),
+    ("embedding_enabled", True, ("signals", "embedding", "enabled")),
+    ("embedding_model_path", "/m/e.bin",
+     ("signals", "embedding", "model_path")),
+    ("embedding_threshold", 0.22, ("signals", "embedding", "threshold")),
+    ("domain_enabled", True, ("signals", "domain", "enabled")),
+    ("domain_model_path", "/m/d.bin", ("signals", "domain", "model_path")),
+    ("safety_jailbreak_enabled", False,
+     ("signals", "safety", "jailbreak", "enabled")),
+    ("safety_jailbreak_model_path", "/m/jb.bin",
+     ("signals", "safety", "jailbreak", "model_path")),
+    ("safety_pii_enabled", False, ("signals", "safety", "pii", "enabled")),
+    ("safety_toxicity_enabled", True,
+     ("signals", "safety", "toxicity", "enabled")),
+    ("safety_toxicity_threshold", 0.33,
+     ("signals", "safety", "toxicity", "threshold")),
+    ("context_enabled", False, ("signals", "context", "enabled")),
+    ("context_output_ratio", 3.5, ("signals", "context", "output_ratio")),
+    ("language_enabled", True, ("signals", "language", "enabled")),
+    ("complexity_enabled", True, ("signals", "complexity", "enabled")),
+    ("complexity_model_path", "/m/cx.bin",
+     ("signals", "complexity", "model_path")),
+    ("complexity_margin", 0.44, ("signals", "complexity", "margin")),
+    ("format_enabled", False, ("signals", "format_enabled")),
+    ("code_enabled", False, ("signals", "code_enabled")),
+    ("toolcall_enabled", False, ("signals", "toolcall_enabled")),
+    ("cost_enabled", False, ("signals", "cost_enabled")),
+]
+
+
+def _resolve(cfg, path):
+    """Read the attribute addressed by a dotted *path* tuple."""
+    node = cfg
+    for part in path:
+        node = getattr(node, part)
+    return node
+
+
+class TestFlatGoSchemaRegression:
+    """A Go-shaped document must actually take effect."""
+
+    @pytest.mark.parametrize("key,value,path", FLAT_SCHEMA_CASES)
+    def test_flat_key_applied(self, key, value, path):
+        cfg = _dict_to_config({key: value})
+        actual = _resolve(cfg, path)
+        assert actual == value, (
+            f"flat key {key!r}={value!r} was discarded; "
+            f"{'.'.join(path)} is {actual!r}"
+        )
+
+    def test_flat_key_set_differs_from_default(self):
+        """Guard the cases table: each value must be a real change."""
+        cfg = default_config()
+        for key, value, path in FLAT_SCHEMA_CASES:
+            assert _resolve(cfg, path) != value, (
+                f"case for {key!r} uses the default value, so it "
+                f"cannot detect a silent discard"
+            )
+
+    def test_disabling_safety_signals_flat(self):
+        """The original bug: disabled safety signals stayed enabled."""
+        cfg = _dict_to_config({
+            "safety_pii_enabled": False,
+            "safety_toxicity_enabled": False,
+            "safety_jailbreak_enabled": False,
+            "keyword_enabled": False,
+            "context_enabled": False,
+        })
+
+        assert cfg.signals.safety.pii.enabled is False
+        assert cfg.signals.safety.toxicity.enabled is False
+        assert cfg.signals.safety.jailbreak.enabled is False
+        assert cfg.signals.keyword.enabled is False
+        assert cfg.signals.context.enabled is False
+
+        enabled = cfg.enabled_signals()
+        for absent in ("PII", "Toxicity", "Jailbreak", "Keyword", "Context"):
+            assert absent not in enabled
+
+    def test_flat_yaml_end_to_end(self, tmp_path: Path):
+        """Same defect via the real YAML loader, not just the dict path."""
+        config_file = tmp_path / "go_shaped.yaml"
+        config_file.write_text(textwrap.dedent("""\
+            max_concurrency: 4
+            timeout_ms: 1000
+            safety_pii_enabled: false
+            safety_toxicity_enabled: false
+            keyword_enabled: false
+        """))
+
+        cfg = load_config(str(config_file))
+
+        assert cfg.max_concurrency == 4
+        assert cfg.timeout_ms == 1000
+        assert cfg.signals.safety.pii.enabled is False
+        assert cfg.signals.keyword.enabled is False
+        assert "PII" not in cfg.enabled_signals()
+        assert "Keyword" not in cfg.enabled_signals()
+
+    def test_flat_schema_covers_pkl_contract(self):
+        """Every key in go/config.pkl must be recognised.
+
+        Parses the shared PKL schema so a key added there without a
+        Python mapping fails here instead of being silently dropped.
+        """
+        pkl_path = (
+            Path(__file__).resolve().parents[2] / "go" / "config.pkl"
+        )
+        if not pkl_path.exists():  # pragma: no cover - polyglot checkout
+            pytest.skip("go/config.pkl not present in this checkout")
+
+        declared = set(
+            re.findall(
+                r"^([a-z][a-z0-9_]*)\s*:", pkl_path.read_text(), re.MULTILINE
+            )
+        )
+        assert declared, "failed to parse any keys from config.pkl"
+
+        missing = declared - set(_FLAT_KEYS) - {"max_concurrency",
+                                                "timeout_ms"}
+        assert not missing, (
+            f"config.pkl keys with no Python mapping: {sorted(missing)}"
+        )
+
+
+class TestUnknownKeysRejected:
+    """Unrecognised keys must fail loudly, never be dropped."""
+
+    def test_unknown_top_level_key(self):
+        with pytest.raises(ConfigError, match="safety_pii_enable"):
+            _dict_to_config({"safety_pii_enable": False})
+
+    def test_unknown_nested_signal_key(self):
+        with pytest.raises(ConfigError, match="jailbrake"):
+            _dict_to_config({"signals": {"safety": {"jailbrake": {}}}})
+
+    def test_unknown_leaf_key(self):
+        with pytest.raises(ConfigError, match="enabld"):
+            _dict_to_config({"signals": {"safety": {"pii": {
+                "enabld": False,
+            }}}})
+
+    def test_nested_block_must_be_mapping(self):
+        with pytest.raises(ConfigError, match="must be a mapping"):
+            _dict_to_config({"signals": {"context": True}})
+
+    def test_root_must_be_mapping(self):
+        with pytest.raises(ConfigError, match="must be a mapping"):
+            _dict_to_config([1, 2, 3])
+
+    def test_keyword_rule_unknown_field(self):
+        with pytest.raises(ConfigError, match="pattern"):
+            _dict_to_config({"signals": {"keyword": {"rules": [
+                {"label": "x", "pattern": ["a"]},
+            ]}}})
+
+    def test_unknown_key_in_yaml_load(self, tmp_path: Path):
+        config_file = tmp_path / "typo.yaml"
+        config_file.write_text("safety_pii_enabledd: false\n")
+        with pytest.raises(ConfigError, match="safety_pii_enabledd"):
+            load_config(str(config_file))
+
+
+class TestMixedShapePrecedence:
+    """Both shapes may coexist; nested wins."""
+
+    def test_nested_overrides_flat(self):
+        cfg = _dict_to_config({
+            "safety_pii_enabled": True,
+            "signals": {"safety": {"pii": {"enabled": False}}},
+        })
+        assert cfg.signals.safety.pii.enabled is False
+
+    def test_flat_survives_unrelated_nested_block(self):
+        """A nested block must not reset flat siblings to defaults."""
+        cfg = _dict_to_config({
+            "safety_pii_enabled": False,
+            "signals": {"safety": {"toxicity": {"enabled": True}}},
+        })
+        assert cfg.signals.safety.pii.enabled is False
+        assert cfg.signals.safety.toxicity.enabled is True
+
+    def test_flat_survives_partial_nested_leaf(self):
+        cfg = _dict_to_config({
+            "context_output_ratio": 9.0,
+            "signals": {"context": {"enabled": False}},
+        })
+        assert cfg.signals.context.enabled is False
+        assert cfg.signals.context.output_ratio == 9.0
+
+
+class TestSignalTypeEnum:
+    """SignalType must stay in lockstep with core/src/types.rs."""
+
+    def test_values_are_pascal_case_wire_spellings(self):
+        assert SignalType.PII.value == "PII"
+        assert SignalType.TOXICITY.value == "Toxicity"
+        assert SignalType.OUTPUT_FORMAT.value == "OutputFormat"
+
+    def test_compares_equal_to_plain_string(self):
+        assert SignalType.TOXICITY == "Toxicity"
+        assert SignalType.TOXICITY != "toxicity"
+
+    def test_matches_core_enum_exactly(self):
+        """Parse core/src/types.rs so a new core variant fails here."""
+        types_rs = (
+            Path(__file__).resolve().parents[2] / "core" / "src" / "types.rs"
+        )
+        if not types_rs.exists():  # pragma: no cover - polyglot checkout
+            pytest.skip("core/src/types.rs not present in this checkout")
+
+        block = re.search(
+            r"pub enum SignalType\s*\{(.*?)\}", types_rs.read_text(), re.S
+        )
+        assert block, "failed to locate SignalType in core/src/types.rs"
+
+        variants = re.findall(r"^\s*([A-Z][A-Za-z]*),", block.group(1),
+                              re.MULTILINE)
+        assert len(variants) == 20, variants
+        assert [s.value for s in SignalType] == variants
+
+    def test_enabled_signals_returns_enum_members(self):
+        enabled = default_config().enabled_signals()
+        assert all(isinstance(s, SignalType) for s in enabled)
+        assert SignalType.PII in enabled

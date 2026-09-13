@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from c12n.config import SignalType
 from c12n.middleware import (
     C12NMiddleware,
     get_signals,
@@ -20,10 +21,13 @@ from c12n.middleware import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+# signal_type values are the PascalCase spellings the core engine
+# emits (c12n_core::SignalType). Lowercase spellings are rejected by
+# core and must never appear in fixtures.
 SAMPLE_RESULTS = {
     "results": [
-        {"signal_type": "toxicity", "confidence": 0.92},
-        {"signal_type": "pii", "confidence": 0.45},
+        {"signal_type": SignalType.TOXICITY.value, "confidence": 0.92},
+        {"signal_type": SignalType.PII.value, "confidence": 0.45},
     ],
     "errors": [],
     "duration_ms": 12,
@@ -152,7 +156,7 @@ async def test_results_stored_in_scope():
     await mw(scope, _make_receive(body), _noop_send)
 
     signals = scope["c12n.signals"]
-    assert signals["results"][0]["signal_type"] == "toxicity"
+    assert signals["results"][0]["signal_type"] == SignalType.TOXICITY
     assert signals["duration_ms"] == 12
 
 
@@ -260,28 +264,28 @@ class TestGetSignals:
 class TestHasSignal:
     def test_found(self):
         scope = {"c12n.signals": SAMPLE_RESULTS}
-        assert has_signal(scope, "toxicity") is True
+        assert has_signal(scope, SignalType.TOXICITY) is True
 
     def test_not_found(self):
         scope = {"c12n.signals": SAMPLE_RESULTS}
         assert has_signal(scope, "spam") is False
 
     def test_no_signals(self):
-        assert has_signal({}, "toxicity") is False
+        assert has_signal({}, SignalType.TOXICITY) is False
 
     def test_no_results_key(self):
         scope = {"c12n.signals": {"errors": []}}
-        assert has_signal(scope, "toxicity") is False
+        assert has_signal(scope, SignalType.TOXICITY) is False
 
 
 class TestSignalConfidence:
     def test_returns_confidence(self):
         scope = {"c12n.signals": SAMPLE_RESULTS}
-        assert signal_confidence(scope, "toxicity") == pytest.approx(0.92)
+        assert signal_confidence(scope, SignalType.TOXICITY) == pytest.approx(0.92)
 
     def test_returns_zero_when_missing(self):
         scope = {"c12n.signals": SAMPLE_RESULTS}
         assert signal_confidence(scope, "spam") == 0.0
 
     def test_returns_zero_no_signals(self):
-        assert signal_confidence({}, "toxicity") == 0.0
+        assert signal_confidence({}, SignalType.TOXICITY) == 0.0
