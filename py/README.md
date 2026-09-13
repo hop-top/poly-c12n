@@ -3,14 +3,12 @@
 LLM request classification engine — Python bindings (PyO3 native core +
 pure-Python helpers) over the Rust `c12n-core` engine.
 
+> **Status:** Active development. Usable today, with some rough edges as features evolve.
+
 > [!NOTE]
 > **Read-only mirror.** This repo (`hop-top/c12n-py`) is subtree-pushed
 > from the canonical monorepo. File issues and PRs at
 > [`hop-top/poly-c12n`](https://github.com/hop-top/poly-c12n).
-
-> [!WARNING]
-> **Alpha — API and tag history may break.** Pin to the latest alpha
-> release rather than a range.
 
 ## Install
 

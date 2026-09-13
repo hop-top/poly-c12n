@@ -2,9 +2,11 @@
 
 LLM request classification engine — PHP FFI bindings over the Rust core.
 
-## Status
+> **Status:** Active development. Usable today, with some rough edges as features evolve.
 
-Alpha. The FFI surface is wired against the cbindgen-generated header in
+## Native library
+
+The FFI surface is wired against the cbindgen-generated header in
 `c12n-core/include/libc12n_core.h`; the native
 `libc12n_core.{so,dylib,dll}` is downloaded by the post-install script
 when a matching release exists. For local development, build the cdylib

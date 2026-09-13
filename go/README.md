@@ -4,15 +4,13 @@ Go bindings over the c12n classification engine (`c12n-core`, written in
 Rust). Classify LLM requests by keyword, safety, complexity, code content,
 and more.
 
+> **Status:** Active development. Usable today, with some rough edges as features evolve.
+
 > [!NOTE]
 > **Read-only mirror.** This repo (`hop-top/c12n`) is a subtree mirror of
 > the polyglot monorepo. File issues and pull requests against the
 > canonical source, [`hop-top/poly-c12n`](https://github.com/hop-top/poly-c12n)
 > — changes made here are overwritten on the next mirror push.
-
-> [!WARNING]
-> **Alpha — API and tag history may break between alpha tags.** Pin to an
-> exact tag, not a range.
 
 ## Install
 
